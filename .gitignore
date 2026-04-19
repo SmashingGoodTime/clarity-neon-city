@@ -1,0 +1,28 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Python (comfy_batch tooling)
+__pycache__/
+*.pyc
+*.pyo
+tools/*.log
+
+# Claude Code session data (if any)
+.claude/
+
+# Backups
+*.bak
+*.tmp
+
+# Node (if you ever add build tooling)
+node_modules/
+dist/
+build/

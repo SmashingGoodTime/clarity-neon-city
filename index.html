@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CLARITY // Neon City</title>
+<link rel="stylesheet" href="style.css?v=19">
+</head>
+<body>
+
+<!-- First-run intro cinematic (hidden by default; shown via JS on NEW RUN if unseen) -->
+<div id="intro-video-screen" style="display:none;">
+  <video id="intro-video" preload="auto" playsinline>
+    <source src="assets/video/clarity_intro.mp4" type="video/mp4">
+  </video>
+  <button id="intro-skip" type="button">SKIP &gt;&gt;</button>
+</div>
+
+<!-- Title / splash screen -->
+<div id="title-screen">
+  <canvas id="matrix-rain"></canvas>
+  <div class="title-stars"></div>
+  <img src="assets/images/logo.png?v=2" alt="NEON CITY" id="title-logo">
+  <div class="title-sub">CLARITY</div>
+  <div class="title-tag">// MEMORY IS CURRENCY · CLARITY IS SURVIVAL</div>
+  <div class="title-actions">
+    <button id="title-new">NEW RUN</button>
+    <button id="title-continue">CONTINUE</button>
+    <button id="title-ngplus" style="display:none;">NG+</button>
+    <button id="title-mute">♪ MUTE</button>
+  </div>
+  <audio id="title-audio" src="assets/audio/title_theme.mp3" preload="auto" loop></audio>
+</div>
+
+<!-- Pirate radio widget -->
+<div id="radio" class="radio-off">
+  <div id="radio-toggle" title="Tune The Sight — Pirate Radio">
+    <span class="radio-icon">◉</span>
+    <span id="radio-label">PIRATE RADIO</span>
+  </div>
+  <div id="radio-body">
+    <img id="radio-portrait" src="assets/images/reso_studio.jpg" alt="">
+    <div id="radio-now"></div>
+    <div id="radio-stations">
+      <button data-station="reso"      class="station active">THE SIGHT · 99.7</button>
+      <button data-station="lattice"   class="station">GREY FREQ · ???</button>
+      <button data-station="omni"      class="station">OMNI PSA · 101.1</button>
+      <button data-station="mnemonic"  class="station">MNEMONIC · UNLISTED</button>
+      <button data-station="chromejaw" class="station">CHROME-JAW · BLACK</button>
+    </div>
+    <audio id="radio-audio" loop></audio>
+  </div>
+</div>
+
+<div id="crt">
+  <div id="scanlines"></div>
+
+  <header id="hud">
+    <div class="hud-block" data-tip="Your character — origin + life path. Shapes what you can do and how factions perceive you.">
+      <div class="label">OPERATIVE</div>
+      <div id="name-readout">— JANE DOE —</div>
+      <div class="sub" id="origin-readout">BASELINE // GUTTER-SYNDICATE RUNNER</div>
+    </div>
+    <div class="hud-block" data-tip="How many memories you can hold. Overflow triggers cyber-psychosis (+Compliance). Circuit Shaman can permanently raise this.">
+      <div class="label">CAPACITY</div>
+      <div id="capacity-bar" class="bar"><div class="fill"></div></div>
+      <div class="sub" id="capacity-readout">0 / 8</div>
+    </div>
+    <div class="hud-block" data-tip="Omni-Corp's suspicion of you. At 70% an Auditor is dispatched; on your next sleep they strip your highest-Clarity unencrypted memory.">
+      <div class="label">COMPLIANCE</div>
+      <div id="compliance-bar" class="bar threat"><div class="fill"></div></div>
+      <div class="sub" id="compliance-readout">0 %</div>
+    </div>
+    <div class="hud-block" data-tip="In-game day. Each 'Tune the deck and sleep' advances it. Unencrypted memories decay overnight. Pending Audits fire on sleep.">
+      <div class="label">DAY</div>
+      <div id="day-readout">01</div>
+      <div class="sub" id="location-readout">SAFEHOUSE // GUTTER-9</div>
+    </div>
+  </header>
+
+  <main id="stage">
+
+    <section id="scene" class="panel">
+      <div class="panel-title">// FEED</div>
+      <div id="scene-prompt"></div>
+      <div id="scene-body">
+        <p class="glitch">Rain on chrome. Signal steady.</p>
+        <p>You wake to the hum of your deck. The walls of your safehouse sweat condensation. Somewhere above Gutter-9, a billboard sings a jingle you can't remember agreeing to learn.</p>
+        <p class="hint">Select an action from the terminal below.</p>
+      </div>
+      <div id="scene-choices"></div>
+    </section>
+
+    <aside id="side-column">
+      <section id="inventory" class="panel">
+        <div class="panel-title" data-tip="Your inventory. Each memory is an item: emotion + clarity + source. Click any to encrypt / re-live / burn.">// MEMORY STACK</div>
+        <div id="memory-list"></div>
+        <div class="panel-footer">
+          <span class="hint">Click a memory for actions.</span>
+        </div>
+      </section>
+
+      <section id="rep-panel" class="panel small">
+        <div class="panel-title" data-tip="Your standing with each faction. Shifts with your choices. High rep unlocks contracts. Low rep closes doors.">// STANDING</div>
+        <div id="rep-list"></div>
+      </section>
+
+      <section id="aug-panel" class="panel small">
+        <div class="panel-title" data-tip="Active augments. Each has a real gameplay effect. Installing any drops Purity rep.">// INSTALLED CHROME</div>
+        <div id="aug-list"><span class="hint">No augments installed.</span></div>
+      </section>
+    </aside>
+
+  </main>
+
+  <div id="toolbar">
+    <button id="btn-help" class="tool-btn" data-tip="Open the glossary of all systems, factions, and augments.">? HELP</button>
+    <button id="btn-save" class="tool-btn">SAVE</button>
+    <button id="btn-load" class="tool-btn">LOAD</button>
+    <button id="btn-reset" class="tool-btn danger">RESET</button>
+  </div>
+
+  <footer id="terminal">
+    <div id="log"></div>
+    <div id="prompt">&gt; <span class="caret"></span></div>
+  </footer>
+
+  <div id="modal-root"></div>
+</div>
+
+<script src="game.js?v=9"></script>
+</body>
+</html>
