@@ -264,7 +264,8 @@ function makeMemory({ hook, emotion, clarity = 3, source = "Yours", synthetic = 
     synthetic: source === "Synthetic" || synthetic,
     encrypted: false,
     backdoor,
-    day: state.day
+    day: state.day,
+    image: hookImage(hook, emotion)
   };
 }
 
@@ -305,6 +306,29 @@ const MEMORY_SEED_HOOKS = {
     "A name you keep forgetting on purpose"
   ]
 };
+
+// Hook -> polaroid image filename. Built once from the seed hooks; non-seed
+// hooks (custom plot memories, [COPY] prefixes from sellMemory) fall back to
+// an emotion-level default.
+const MEMORY_HOOK_IMAGES = (() => {
+  const map = {};
+  for (const emo of EMOTIONS) {
+    (MEMORY_SEED_HOOKS[emo] || []).forEach((hook, i) => {
+      map[hook] = `memory_${emo.toLowerCase()}_${i + 1}.png`;
+    });
+  }
+  return map;
+})();
+
+function hookImage(hook, emotion) {
+  const base = "assets/images/memories/";
+  const copyStripped = typeof hook === "string" && hook.startsWith("[COPY] ")
+    ? hook.slice(7)
+    : hook;
+  if (MEMORY_HOOK_IMAGES[copyStripped]) return base + MEMORY_HOOK_IMAGES[copyStripped];
+  const e = (emotion || "Awe").toLowerCase();
+  return `${base}memory_${e}_default.png`;
+}
 
 function randomMemory({ emotion, clarity, source } = {}) {
   const e = emotion || rand(EMOTIONS);
@@ -390,7 +414,9 @@ function render() {
   state.memories.forEach(m => {
     const el = document.createElement("div");
     el.className = `memory ${m.encrypted ? "encrypted" : ""} ${m.synthetic ? "synthetic" : ""}`;
+    const imgSrc = m.image || hookImage(m.hook, m.emotion);
     el.innerHTML = `
+      <img class="polaroid-img" src="${imgSrc}" alt="" onerror="this.onerror=null;this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';this.dataset.missing='1';">
       <div class="hook" data-tip="Click for memory actions — encrypt, re-live, burn.">${escapeHtml(m.hook)}${m.backdoor ? ' <span style="color:var(--audit);" data-tip="Omni-Corp has a tracking ping on this memory. Auditors will find it.">•PING</span>' : ''}</div>
       <div class="meta">
         <span class="emotion ${m.emotion}" data-tip="${escapeHtml(EMOTION_TIPS[m.emotion] || "")}">${m.emotion.toUpperCase()}</span>
@@ -1527,11 +1553,15 @@ function openMemoryModal(m) {
   // that predate the tag (so existing players don't lose the reveal).
   const isStarter = m.starter === true
     || m.hook.startsWith("The face of the woman who raised you");
+  const modalImgSrc = m.image || hookImage(m.hook, m.emotion);
   modal.innerHTML = `
     <div class="modal">
       <h2>// MEMORY RECORD</h2>
       <div class="body">
-        <p style="font-size:14px;color:var(--ink);">"${escapeHtml(m.hook)}"</p>
+        <div class="memory-polaroid ${m.synthetic ? 'synthetic' : ''}">
+          <img src="${modalImgSrc}" alt="" onerror="this.onerror=null;this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';this.dataset.missing='1';">
+          <div class="caption">"${escapeHtml(m.hook)}"</div>
+        </div>
         <p style="color:var(--dim);font-size:12px;">
           EMOTION: <span class="emotion ${m.emotion}">${m.emotion}</span> ·
           CLARITY: ${m.clarity}/5 ·
