@@ -400,14 +400,6 @@ body {
 }
 .memory .meta span { text-shadow: none; }
 .memory .meta .clarity-pips { letter-spacing: 1px; }
-.memory .meta .mem-tags {
-  flex-basis: 100%;
-  color: #5a4f1d;
-  font-size: 6px;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-
 .emotion.Joy    { color: var(--neon-y); }
 .emotion.Fear   { color: var(--neon-c); }
 .emotion.Rage   { color: var(--neon-r); }

@@ -688,6 +688,7 @@ function render() {
     const el = document.createElement("div");
     el.className = `memory ${m.encrypted ? "encrypted" : ""} ${m.synthetic ? "synthetic" : ""}`;
     const imgSrc = m.image || hookImage(m.hook, m.emotion);
+    el.setAttribute("data-tip", `Tags: ${escapeHtml(memoryTagText(m))}`);
     el.innerHTML = `
       <img class="polaroid-img" src="${imgSrc}" alt="" onerror="this.onerror=null;this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';this.dataset.missing='1';">
       <div class="hook" data-tip="Click for memory actions — encrypt, re-live, burn.">${escapeHtml(m.hook)}${m.backdoor ? ' <span style="color:var(--audit);" data-tip="Omni-Corp has a tracking ping on this memory. Auditors will find it.">•PING</span>' : ''}</div>
@@ -695,7 +696,6 @@ function render() {
         <span class="emotion ${m.emotion}" data-tip="${escapeHtml(EMOTION_TIPS[m.emotion] || "")}">${m.emotion.toUpperCase()}</span>
         <span class="clarity-pips" data-tip="Clarity ${m.clarity}/5. Decays 1 per night unless encrypted. Higher Clarity is valuable \u2014 and targeted first by Auditors.">${"▮".repeat(m.clarity)}${"▯".repeat(5 - m.clarity)}</span>
         <span data-tip="${m.source === 'Yours' ? 'Your own memory. Unchanged.' : m.source === 'Stolen' ? 'Extracted from someone else. Has a moral cost.' : 'Synthetic copy. Half-clarity and sometimes backdoored.'}">${m.source.toUpperCase()}</span>
-        <span class="mem-tags" data-tip="Memory tags unlock vendor recipes and link related memories.">${escapeHtml(memoryTagText(m))}</span>
       </div>
     `;
     el.addEventListener("click", () => openMemoryModal(m));
