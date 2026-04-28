@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>CLARITY // Neon City</title>
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=28">
 </head>
 <body>
 
@@ -61,13 +61,14 @@
     </div>
     <div class="hud-block" data-tip="How many memories you can hold. Overflow triggers cyber-psychosis (+Compliance). Circuit Shaman can permanently raise this.">
       <div class="label">CAPACITY</div>
-      <div id="capacity-bar" class="bar"><div class="fill"></div></div>
+      <div id="capacity-bar" class="bar" role="progressbar" aria-label="Memory capacity"><div class="fill"></div></div>
       <div class="sub" id="capacity-readout">0 / 8</div>
     </div>
-    <div class="hud-block" data-tip="Omni-Corp's suspicion of you. At 70% an Auditor is dispatched; on your next sleep they strip your highest-Clarity unencrypted memory.">
+    <div class="hud-block" data-tip="Omni-Corp's suspicion. 40% = Watcher, 70% = Auditor (strips 2 memories, locks board next day), 90% = Enforcement (half stack + vendor trust loss). Priority: Omni-PING > Stolen > highest Clarity.">
       <div class="label">COMPLIANCE</div>
-      <div id="compliance-bar" class="bar threat"><div class="fill"></div></div>
+      <div id="compliance-bar" class="bar threat" role="progressbar" aria-label="Compliance heat"><div class="fill"></div></div>
       <div class="sub" id="compliance-readout">0 %</div>
+      <div class="sub" id="audit-tier-readout" style="margin-top:3px;"></div>
     </div>
     <div class="hud-block" data-tip="In-game day. Each 'Tune the deck and sleep' advances it. Unencrypted memories decay overnight. Pending Audits fire on sleep.">
       <div class="label">DAY</div>
@@ -78,15 +79,15 @@
 
   <main id="stage">
 
-    <section id="scene" class="panel">
+    <section id="scene" class="panel" aria-label="Scene feed">
       <div class="panel-title">// FEED</div>
       <div id="scene-prompt"></div>
-      <div id="scene-body">
+      <div id="scene-body" aria-live="polite">
         <p class="glitch">Rain on chrome. Signal steady.</p>
         <p>You wake to the hum of your deck. The walls of your safehouse sweat condensation. Somewhere above Gutter-9, a billboard sings a jingle you can't remember agreeing to learn.</p>
-        <p class="hint">Select an action from the terminal below.</p>
+        <p class="hint">Select an action from the terminal below. Keys: 1–9 pick a choice · ↑/↓ nav · H help · M mute · G sight · Ctrl+S save · Ctrl+L load.</p>
       </div>
-      <div id="scene-choices"></div>
+      <div id="scene-choices" role="group" aria-label="Scene choices"></div>
     </section>
 
     <aside id="side-column">
@@ -103,6 +104,11 @@
         <div id="rep-list"></div>
       </section>
 
+      <section id="lead-panel" class="panel small" aria-live="polite">
+        <div class="panel-title" data-tip="Live leads from your current state: unlocks, risks, memory goals, and endgame pressure.">// CASE BOARD</div>
+        <div id="lead-list"></div>
+      </section>
+
       <section id="aug-panel" class="panel small">
         <div class="panel-title" data-tip="Active augments. Each has a real gameplay effect. Installing any drops Purity rep.">// INSTALLED CHROME</div>
         <div id="aug-list"><span class="hint">No augments installed.</span></div>
@@ -111,11 +117,15 @@
 
   </main>
 
-  <div id="toolbar">
-    <button id="btn-help" class="tool-btn" data-tip="Open the glossary of all systems, factions, and augments.">? HELP</button>
-    <button id="btn-save" class="tool-btn">SAVE</button>
-    <button id="btn-load" class="tool-btn">LOAD</button>
-    <button id="btn-reset" class="tool-btn danger">RESET</button>
+  <div id="toolbar" role="toolbar" aria-label="Game actions">
+    <button id="btn-help" class="tool-btn" data-tip="Open the glossary of all systems, factions, and augments. (H)" aria-label="Open glossary / help">? HELP</button>
+    <button id="btn-sight" class="tool-btn" data-tip="Toggle Reso's Sight overlay. When on, some scenes reveal hidden echoes. (G)" aria-label="Toggle Sight mode">◉ SIGHT</button>
+    <button id="hud-mute" class="tool-btn" data-tip="Mute all audio — BGM, radio, SFX, voice. (M)" aria-label="Toggle audio mute">♪ MUTE</button>
+    <button id="btn-save" class="tool-btn" data-tip="Save to a slot. Ctrl+S quicksaves to the active slot." aria-label="Save game">SAVE</button>
+    <button id="btn-load" class="tool-btn" data-tip="Load from a slot. Ctrl+L quickloads the active slot." aria-label="Load game">LOAD</button>
+    <button id="btn-history" class="tool-btn" data-tip="Open your local run history and playtest stats." aria-label="Open run history">HISTORY</button>
+    <button id="btn-export" class="tool-btn" data-tip="Export or import save data for this slot." aria-label="Export or import save">EXPORT</button>
+    <button id="btn-reset" class="tool-btn danger" data-tip="Reset the active save slot. NG+ unlocks are preserved." aria-label="Reset active save">RESET</button>
   </div>
 
   <footer id="terminal">
@@ -126,6 +136,6 @@
   <div id="modal-root"></div>
 </div>
 
-<script src="game.js?v=11"></script>
+<script src="game.js?v=28"></script>
 </body>
 </html>
