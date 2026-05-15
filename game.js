@@ -375,6 +375,7 @@ function freshState() {
         highestCompliance: 0
       },
       // Completed contract ids (for tracking + chaining)
+      completedContracts: [],
       contractLog: []
     },
     runsCompleted: 0,
@@ -402,6 +403,7 @@ function migrateSave(raw) {
   if (!merged.flags.vendorTrust) merged.flags.vendorTrust = fresh.flags.vendorTrust;
   else merged.flags.vendorTrust = Object.assign({}, fresh.flags.vendorTrust, merged.flags.vendorTrust);
   if (!Array.isArray(merged.flags.followUps)) merged.flags.followUps = [];
+  if (!Array.isArray(merged.flags.completedContracts)) merged.flags.completedContracts = [];
   if (!Array.isArray(merged.flags.contractLog)) merged.flags.contractLog = [];
   if (!Array.isArray(merged.flags.archiveEchoes)) merged.flags.archiveEchoes = [];
   if (!Array.isArray(merged.flags.consequences)) merged.flags.consequences = [];
@@ -1423,7 +1425,7 @@ function enterSafehouse() {
 // ================================================================
 // ==== CONTRACT BOARD ====
 // Available contracts filtered by gate(). Locked contracts surface
-// with a gateReason() explaining the unlock condition.
+// as a short hint instead of locked choice rows.
 // processFollowUps() consumes state.flags.followUps queued during
 // arcs to unlock future postings.
 // ================================================================
@@ -1655,6 +1657,28 @@ const STORY_CONTRACT_IDS = [
   "droidboy_rankclimb"
 ];
 
+const STORY_CONTRACT_PRIORITY = {
+  purity_cleanse: 10,
+  purity_spy_ring: 20,
+  lattice_data_theft: 40,
+  compliance_heist: 50,
+  droidboy_rankclimb: 60,
+  omni_sabotage: 70
+};
+
+function completedContractIds() {
+  return [
+    ...(state.flags.completedContracts || []),
+    ...(state.flags.contractLog || [])
+  ];
+}
+
+function storyContractPriority(c) {
+  if (!STORY_CONTRACT_IDS.includes(c.id)) return -1;
+  const completed = completedContractIds().includes(c.id);
+  return (STORY_CONTRACT_PRIORITY[c.id] || 0) + (completed ? -100 : 0);
+}
+
 function primaryContractPostings(available) {
   const picked = [];
   const add = (contract) => {
@@ -1663,7 +1687,9 @@ function primaryContractPostings(available) {
 
   add(available.find(c => effectiveCompliance(c.compliance, c) <= 10));
   add(available.find(c => effectiveCompliance(c.compliance, c) > 10));
-  add(available.find(c => STORY_CONTRACT_IDS.includes(c.id)));
+  add(available
+    .filter(c => storyContractPriority(c) >= 0)
+    .sort((a, b) => storyContractPriority(b) - storyContractPriority(a))[0]);
 
   available.forEach(add);
   return picked.slice(0, 3);
@@ -2605,10 +2631,19 @@ const ARCS = {
   }
 };
 
+function recordCompletedContract(contractId) {
+  if (!contractId) return;
+  for (const key of ["completedContracts", "contractLog"]) {
+    if (!Array.isArray(state.flags[key])) state.flags[key] = [];
+    if (!state.flags[key].includes(contractId)) state.flags[key].push(contractId);
+  }
+}
+
 function endRun(c, text) {
   const report = buildRunReport(_runSnapshot, c);
   _runSnapshot = null;
   state.runsCompleted += 1;
+  recordCompletedContract(c.id);
   trackStat("contracts", 1);
   state.flags.tutorialStep = Math.max(state.flags.tutorialStep || 0, 1);
   pushRunHistory(report, c);

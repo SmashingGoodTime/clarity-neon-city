@@ -29,6 +29,21 @@ function assertFunctionContains(source, name, needle, label) {
   assertContains(body, needle, label);
 }
 
+function assertStoryPriorityOutranks(source, highValueId, lowValueId) {
+  const match = source.match(/const STORY_CONTRACT_PRIORITY = \{([\s\S]*?)\};/);
+  if (!match) {
+    throw new Error("story priority fixture: missing STORY_CONTRACT_PRIORITY");
+  }
+  const valueFor = (id) => {
+    const idMatch = match[1].match(new RegExp(`${id}:\\s*(\\d+)`));
+    if (!idMatch) throw new Error(`story priority fixture: missing ${id}`);
+    return Number(idMatch[1]);
+  };
+  if (valueFor(highValueId) <= valueFor(lowValueId)) {
+    throw new Error(`story priority fixture: expected ${highValueId} to outrank ${lowValueId}`);
+  }
+}
+
 assertContains(game, "function renderSafehouseScene()", "safehouse scene helper");
 assertContains(game, "function safehouseChoices()", "safehouse choices helper");
 assertContains(game, 'label: "Take a Contract"', "safehouse contract action");
@@ -66,5 +81,13 @@ assertContains(game, "const STORY_CONTRACT_IDS", "story contract list");
 assertContains(game, "primaryContractPostings(available)", "contract board uses selector");
 assertContains(game, "Only the clearest jobs are lit.", "simplified contract board copy");
 assertNotContains(game, "...locked.map(c => ({", "locked contract choices removed");
+assertContains(game, "function storyContractPriority(c)", "story contract priority helper");
+assertFunctionContains(game, "primaryContractPostings", "storyContractPriority(c)", "primary selector uses story priority");
+assertNotContains(game, "available.find(c => STORY_CONTRACT_IDS.includes(c.id))", "old first-story selector removed");
+assertContains(game, "function completedContractIds()", "completed contract tracking helper");
+assertContains(game, "recordCompletedContract(c.id)", "completed contract recorded at run end");
+assertStoryPriorityOutranks(game, "droidboy_rankclimb", "purity_cleanse");
+assertStoryPriorityOutranks(game, "compliance_heist", "purity_cleanse");
+assertStoryPriorityOutranks(game, "omni_sabotage", "purity_cleanse");
 
 console.log("player simplification checks passed");
