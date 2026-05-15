@@ -1646,6 +1646,35 @@ function dailyContractModifier(contractId = "") {
   return CONTRACT_MODIFIERS[idx];
 }
 
+const STORY_CONTRACT_IDS = [
+  "purity_cleanse",
+  "lattice_data_theft",
+  "purity_spy_ring",
+  "omni_sabotage",
+  "compliance_heist",
+  "droidboy_rankclimb"
+];
+
+function primaryContractPostings(available) {
+  const picked = [];
+  const add = (contract) => {
+    if (contract && !picked.some(c => c.id === contract.id)) picked.push(contract);
+  };
+
+  add(available.find(c => effectiveCompliance(c.compliance, c) <= 10));
+  add(available.find(c => effectiveCompliance(c.compliance, c) > 10));
+  add(available.find(c => STORY_CONTRACT_IDS.includes(c.id)));
+
+  available.forEach(add);
+  return picked.slice(0, 3);
+}
+
+function nextLockedContractHint(locked) {
+  const c = locked.find(item => gateReason(item));
+  if (!c) return "";
+  return `A dim posting flickers behind the board: ${contractTitle(c)} - ${gateReason(c)}.`;
+}
+
 function openContractBoard() {
   state.location = "safehouse";
   processFollowUps();
@@ -1662,26 +1691,23 @@ function openContractBoard() {
     return;
   }
   const available = CONTRACTS.filter(c => c.gate());
-  const locked = CONTRACTS.filter(c => !c.gate() && gateReason(c)).slice(0, 5);
+  const locked = CONTRACTS.filter(c => !c.gate() && gateReason(c));
+  const postings = primaryContractPostings(available);
   const todayMod = dailyContractModifier("board");
+  const lockedHint = nextLockedContractHint(locked);
   setScene({
     title: "// CONTRACT BOARD",
     body: [
-      `${available.length} posting${available.length === 1 ? "" : "s"} pulse on the grey-market board.`,
+      "Only the clearest jobs are lit.",
+      "Pick one run. Bring back a memory. Deal with the heat after.",
       `<span class="hint">${todayMod.label}: ${todayMod.text}</span>`,
-      locked.length ? `<span class="hint">${locked.length} other posting${locked.length === 1 ? "" : "s"} are dim — unlock conditions listed below.</span>` : ''
+      lockedHint ? `<span class="hint">${lockedHint}</span>` : ""
     ].filter(Boolean),
     choices: [
-      ...available.map(c => ({
+      ...postings.map(c => ({
         label: contractBoardLabel(c),
-        tag: `C+${effectiveCompliance(c.compliance, c)}`,
+        tag: `HEAT +${effectiveCompliance(c.compliance, c)}`,
         action: () => startContract(c)
-      })),
-      ...locked.map(c => ({
-        label: contractBoardLabel(c, gateReason(c)),
-        tag: "LOCKED",
-        disabled: true,
-        action: () => log(`// ${gateReason(c)}`, "warn")
       })),
       { label: "Back", action: enterSafehouse }
     ]

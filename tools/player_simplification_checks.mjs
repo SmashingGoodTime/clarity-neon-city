@@ -61,5 +61,10 @@ assertNotContains(game, 'label: "Drop off at The Shadow Archive"', "old safehous
 assertNotContains(game, 'label: "Ping the Grey Frequency"', "old safehouse vendor action");
 assertNotContains(game, 'label: "Visit the Purity Temple"', "old safehouse vendor action");
 assertContains(html, '<button id="btn-help"', "help button remains available");
+assertContains(game, "function primaryContractPostings(available)", "primary contract selector");
+assertContains(game, "const STORY_CONTRACT_IDS", "story contract list");
+assertContains(game, "primaryContractPostings(available)", "contract board uses selector");
+assertContains(game, "Only the clearest jobs are lit.", "simplified contract board copy");
+assertNotContains(game, "...locked.map(c => ({", "locked contract choices removed");
 
 console.log("player simplification checks passed");
