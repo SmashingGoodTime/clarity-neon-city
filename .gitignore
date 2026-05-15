@@ -17,6 +17,7 @@ tools/*.log
 
 # Claude Code session data (if any)
 .claude/
+.worktrees/
 
 # Backups
 *.bak
