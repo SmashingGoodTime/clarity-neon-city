@@ -29,6 +29,17 @@ function assertFunctionContains(source, name, needle, label) {
   assertContains(body, needle, label);
 }
 
+function assertFunctionNotContains(source, name, needle, label) {
+  const signature = `function ${name}(`;
+  const start = source.indexOf(signature);
+  if (start === -1) {
+    throw new Error(`${label}: missing ${signature}`);
+  }
+  const next = source.indexOf("\nfunction ", start + signature.length);
+  const body = source.slice(start, next === -1 ? source.length : next);
+  assertNotContains(body, needle, label);
+}
+
 function assertStoryPriorityOutranks(source, highValueId, lowValueId) {
   const match = source.match(/const STORY_CONTRACT_PRIORITY = \{([\s\S]*?)\};/);
   if (!match) {
@@ -84,8 +95,12 @@ assertNotContains(game, "...locked.map(c => ({", "locked contract choices remove
 assertContains(game, "function storyContractPriority(c)", "story contract priority helper");
 assertFunctionContains(game, "primaryContractPostings", "storyContractPriority(c)", "primary selector uses story priority");
 assertNotContains(game, "available.find(c => STORY_CONTRACT_IDS.includes(c.id))", "old first-story selector removed");
-assertContains(game, "function completedContractIds()", "completed contract tracking helper");
-assertContains(game, "recordCompletedContract(c.id)", "completed contract recorded at run end");
+assertContains(game, "function storyContractExhausted(c)", "story contract exhaustion helper");
+assertFunctionContains(game, "storyContractPriority", "storyContractExhausted(c)", "story priority uses exhaustion helper");
+assertFunctionContains(game, "storyContractExhausted", 'case "droidboy_rankclimb"', "droidboy exhaustion special case");
+assertFunctionContains(game, "storyContractExhausted", "(state.flags.droidBoyRank || 0) >= 3", "droidboy rank climb exhausts only at rank 3");
+assertFunctionNotContains(game, "storyContractPriority", "completedContractIds().includes(c.id)", "blanket completed-story demotion removed");
+assertNotContains(game, "completed ? -100", "blanket completed penalty removed");
 assertStoryPriorityOutranks(game, "droidboy_rankclimb", "purity_cleanse");
 assertStoryPriorityOutranks(game, "compliance_heist", "purity_cleanse");
 assertStoryPriorityOutranks(game, "omni_sabotage", "purity_cleanse");

@@ -375,7 +375,6 @@ function freshState() {
         highestCompliance: 0
       },
       // Completed contract ids (for tracking + chaining)
-      completedContracts: [],
       contractLog: []
     },
     runsCompleted: 0,
@@ -403,7 +402,6 @@ function migrateSave(raw) {
   if (!merged.flags.vendorTrust) merged.flags.vendorTrust = fresh.flags.vendorTrust;
   else merged.flags.vendorTrust = Object.assign({}, fresh.flags.vendorTrust, merged.flags.vendorTrust);
   if (!Array.isArray(merged.flags.followUps)) merged.flags.followUps = [];
-  if (!Array.isArray(merged.flags.completedContracts)) merged.flags.completedContracts = [];
   if (!Array.isArray(merged.flags.contractLog)) merged.flags.contractLog = [];
   if (!Array.isArray(merged.flags.archiveEchoes)) merged.flags.archiveEchoes = [];
   if (!Array.isArray(merged.flags.consequences)) merged.flags.consequences = [];
@@ -1666,17 +1664,26 @@ const STORY_CONTRACT_PRIORITY = {
   omni_sabotage: 70
 };
 
-function completedContractIds() {
-  return [
-    ...(state.flags.completedContracts || []),
-    ...(state.flags.contractLog || [])
-  ];
+function storyContractExhausted(c) {
+  switch (c.id) {
+    case "droidboy_rankclimb":
+      return (state.flags.droidBoyRank || 0) >= 3;
+    case "lattice_data_theft":
+      return !!state.flags.latticeCompleted;
+    case "purity_spy_ring":
+      return !!state.flags.spyRingCompleted;
+    case "omni_sabotage":
+      return !!state.flags.omniSabotageCompleted;
+    case "purity_cleanse":
+      return !!state.flags.kaelSuspect;
+    default:
+      return false;
+  }
 }
 
 function storyContractPriority(c) {
   if (!STORY_CONTRACT_IDS.includes(c.id)) return -1;
-  const completed = completedContractIds().includes(c.id);
-  return (STORY_CONTRACT_PRIORITY[c.id] || 0) + (completed ? -100 : 0);
+  return (STORY_CONTRACT_PRIORITY[c.id] || 0) + (storyContractExhausted(c) ? -100 : 0);
 }
 
 function primaryContractPostings(available) {
@@ -2631,19 +2638,10 @@ const ARCS = {
   }
 };
 
-function recordCompletedContract(contractId) {
-  if (!contractId) return;
-  for (const key of ["completedContracts", "contractLog"]) {
-    if (!Array.isArray(state.flags[key])) state.flags[key] = [];
-    if (!state.flags[key].includes(contractId)) state.flags[key].push(contractId);
-  }
-}
-
 function endRun(c, text) {
   const report = buildRunReport(_runSnapshot, c);
   _runSnapshot = null;
   state.runsCompleted += 1;
-  recordCompletedContract(c.id);
   trackStat("contracts", 1);
   state.flags.tutorialStep = Math.max(state.flags.tutorialStep || 0, 1);
   pushRunHistory(report, c);
