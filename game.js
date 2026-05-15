@@ -1691,13 +1691,16 @@ function primaryContractPostings(available) {
   const add = (contract) => {
     if (contract && !picked.some(c => c.id === contract.id)) picked.push(contract);
   };
+  const nonStory = available.filter(c => !STORY_CONTRACT_IDS.includes(c.id));
+  const storyCandidates = available
+    .filter(c => STORY_CONTRACT_IDS.includes(c.id) && !storyContractExhausted(c))
+    .sort((a, b) => storyContractPriority(b) - storyContractPriority(a));
 
-  add(available.find(c => effectiveCompliance(c.compliance, c) <= 10));
-  add(available.find(c => effectiveCompliance(c.compliance, c) > 10));
-  add(available
-    .filter(c => storyContractPriority(c) >= 0)
-    .sort((a, b) => storyContractPriority(b) - storyContractPriority(a))[0]);
-
+  storyCandidates.slice(0, 2).forEach(add);
+  add(nonStory.find(c => effectiveCompliance(c.compliance, c) <= 10));
+  add(nonStory.find(c => effectiveCompliance(c.compliance, c) > 10));
+  nonStory.forEach(add);
+  storyCandidates.slice(2).forEach(add);
   available.forEach(add);
   return picked.slice(0, 3);
 }

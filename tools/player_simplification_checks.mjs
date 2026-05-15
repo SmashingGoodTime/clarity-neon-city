@@ -93,7 +93,7 @@ assertContains(game, "primaryContractPostings(available)", "contract board uses 
 assertContains(game, "Only the clearest jobs are lit.", "simplified contract board copy");
 assertNotContains(game, "...locked.map(c => ({", "locked contract choices removed");
 assertContains(game, "function storyContractPriority(c)", "story contract priority helper");
-assertFunctionContains(game, "primaryContractPostings", "storyContractPriority(c)", "primary selector uses story priority");
+assertFunctionContains(game, "primaryContractPostings", "storyContractPriority(b) - storyContractPriority(a)", "primary selector sorts by story priority");
 assertNotContains(game, "available.find(c => STORY_CONTRACT_IDS.includes(c.id))", "old first-story selector removed");
 assertContains(game, "function storyContractExhausted(c)", "story contract exhaustion helper");
 assertFunctionContains(game, "storyContractPriority", "storyContractExhausted(c)", "story priority uses exhaustion helper");
@@ -101,6 +101,10 @@ assertFunctionContains(game, "storyContractExhausted", 'case "droidboy_rankclimb
 assertFunctionContains(game, "storyContractExhausted", "(state.flags.droidBoyRank || 0) >= 3", "droidboy rank climb exhausts only at rank 3");
 assertFunctionNotContains(game, "storyContractPriority", "completedContractIds().includes(c.id)", "blanket completed-story demotion removed");
 assertNotContains(game, "completed ? -100", "blanket completed penalty removed");
+assertFunctionContains(game, "primaryContractPostings", "const nonStory = available.filter(c => !STORY_CONTRACT_IDS.includes(c.id));", "primary selector separates non-story contracts");
+assertFunctionContains(game, "primaryContractPostings", "storyCandidates.slice(0, 2).forEach(add);", "primary selector adds two story candidates first");
+assertFunctionContains(game, "primaryContractPostings", "add(nonStory.find(c => effectiveCompliance(c.compliance, c) <= 10));", "primary selector low-risk filler uses non-story");
+assertFunctionContains(game, "primaryContractPostings", "add(nonStory.find(c => effectiveCompliance(c.compliance, c) > 10));", "primary selector high-risk filler uses non-story");
 assertStoryPriorityOutranks(game, "droidboy_rankclimb", "purity_cleanse");
 assertStoryPriorityOutranks(game, "compliance_heist", "purity_cleanse");
 assertStoryPriorityOutranks(game, "omni_sabotage", "purity_cleanse");
