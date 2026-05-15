@@ -18,6 +18,17 @@ function assertNotContains(source, needle, label) {
   }
 }
 
+function assertFunctionContains(source, name, needle, label) {
+  const signature = `function ${name}(`;
+  const start = source.indexOf(signature);
+  if (start === -1) {
+    throw new Error(`${label}: missing ${signature}`);
+  }
+  const next = source.indexOf("\nfunction ", start + signature.length);
+  const body = source.slice(start, next === -1 ? source.length : next);
+  assertContains(body, needle, label);
+}
+
 assertContains(game, "function renderSafehouseScene()", "safehouse scene helper");
 assertContains(game, "function safehouseChoices()", "safehouse choices helper");
 assertContains(game, 'label: "Take a Contract"', "safehouse contract action");
@@ -28,9 +39,27 @@ assertContains(game, 'label: "Help"', "safehouse help action");
 assertContains(game, "function openMarket()", "market entry scene");
 assertContains(game, "const MARKET_ENTRIES", "market entry definitions");
 assertContains(game, "function openManageMemories()", "memory management scene");
+assertContains(game, "function returnToSafehouseMenu()", "safehouse local return helper");
+assertContains(game, "function guardedOpenMarket()", "safehouse market guard");
+assertContains(game, "function guardedOpenRipperdoc()", "market ripperdoc guard");
+assertContains(game, "function guardedOpenMnemonic()", "market mnemonic guard");
+assertContains(game, "function guardedOpenShadow()", "market shadow guard");
+assertContains(game, "function guardedOpenGrey()", "market grey guard");
+assertContains(game, "function guardedOpenPurity()", "market purity guard");
+assertContains(game, "action: guardedOpenMarket", "safehouse market guarded action");
+assertContains(game, "action: guardedOpenRipperdoc", "market ripperdoc guarded action");
+assertContains(game, "action: guardedOpenMnemonic", "market mnemonic guarded action");
+assertContains(game, "action: guardedOpenShadow", "market shadow guarded action");
+assertContains(game, "action: guardedOpenGrey", "market grey guarded action");
+assertContains(game, "action: guardedOpenPurity", "market purity guarded action");
+assertContains(game, 'choices.push({ label: "Back", action: returnToSafehouseMenu });', "safehouse submenus local back action");
+assertFunctionContains(game, "enterSafehouse", "renderSafehouseScene();", "safehouse entry render route");
+assertFunctionContains(game, "enterSafehouseAfterEvent", "renderSafehouseScene();", "post-event safehouse render route");
 assertNotContains(game, 'label: "Visit the Ripperdoc"', "old safehouse vendor action");
 assertNotContains(game, 'label: "Route through Mnemonic Lab"', "old safehouse vendor action");
 assertNotContains(game, 'label: "Drop off at The Shadow Archive"', "old safehouse vendor action");
+assertNotContains(game, 'label: "Ping the Grey Frequency"', "old safehouse vendor action");
+assertNotContains(game, 'label: "Visit the Purity Temple"', "old safehouse vendor action");
 assertContains(html, '<button id="btn-help"', "help button remains available");
 
 console.log("player simplification checks passed");

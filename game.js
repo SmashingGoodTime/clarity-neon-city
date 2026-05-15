@@ -1203,6 +1203,80 @@ function marketIsUseful() {
     || state.day >= 2;
 }
 
+function returnToSafehouseMenu() {
+  state.location = "safehouse";
+  render();
+  renderSafehouseScene();
+}
+
+function ripperdocUnavailable() {
+  return !hasAnyMemory() || (state.flags.chromeWarActive && !state.flags.chromeWarResolved);
+}
+
+function mnemonicUnavailable() {
+  return !hasAnyMemory();
+}
+
+function shadowUnavailable() {
+  return !hasAnyMemory();
+}
+
+function greyUnavailable() {
+  return state.reputation.grey < 2 && !hasAug("ice");
+}
+
+function purityUnavailable() {
+  return state.reputation.purity < 1 && state.day < 2;
+}
+
+function guardedOpenMarket() {
+  if (!marketIsUseful()) {
+    log("// The Market is quiet. Earn a memory, a contact, or one more night.", "warn");
+    return;
+  }
+  openMarket();
+}
+
+function guardedOpenRipperdoc() {
+  if (ripperdocUnavailable()) {
+    log("// Ripperdoc access is blocked. Bring a memory and avoid active chrome trouble.", "warn");
+    return;
+  }
+  openRipperdoc();
+}
+
+function guardedOpenMnemonic() {
+  if (mnemonicUnavailable()) {
+    log("// Mnemonic needs a memory before they will deal.", "warn");
+    return;
+  }
+  openMnemonic();
+}
+
+function guardedOpenShadow() {
+  if (shadowUnavailable()) {
+    log("// The Shadow Archive needs a memory to preserve.", "warn");
+    return;
+  }
+  openShadow();
+}
+
+function guardedOpenGrey() {
+  if (greyUnavailable()) {
+    log("// Grey Frequency is out of reach. Earn trust or install ICE-piercer.", "warn");
+    return;
+  }
+  openGrey();
+}
+
+function guardedOpenPurity() {
+  if (purityUnavailable()) {
+    log("// The Purity Temple is closed to you tonight.", "warn");
+    return;
+  }
+  openPurity();
+}
+
 function safehouseBody() {
   const heat = typeof heatState === "function" ? heatState(state.compliance) : null;
   const heatLine = heat && heat.label !== "LOW"
@@ -1227,7 +1301,7 @@ function safehouseChoices() {
     {
       label: "Visit the Market",
       tag: "MARKET",
-      action: openMarket,
+      action: guardedOpenMarket,
       disabled: () => !marketIsUseful(),
       tip: "The Market opens after you have a memory, a contact, or a little time in the city."
     },
@@ -1258,7 +1332,7 @@ function openManageMemories() {
       tag: `${m.emotion} ${m.clarity}`,
       action: () => openMemoryModal(m)
     }));
-  choices.push({ label: "Back", action: enterSafehouse });
+  choices.push({ label: "Back", action: returnToSafehouseMenu });
   setScene({
     title: "// MEMORY CARE",
     body: [
@@ -1273,43 +1347,43 @@ const MARKET_ENTRIES = [
   {
     label: "Ripperdoc - buy chrome",
     tag: "SPEND",
-    action: openRipperdoc,
-    disabled: () => !hasAnyMemory() || (state.flags.chromeWarActive && !state.flags.chromeWarResolved),
+    action: guardedOpenRipperdoc,
+    disabled: ripperdocUnavailable,
     tip: "Chrome costs memories. The Ripperdoc is unavailable during an active Chrome-Jaws war."
   },
   {
     label: "Mnemonic Lab - sell or copy memories",
     tag: "TRADE",
-    action: openMnemonic,
-    disabled: () => !hasAnyMemory(),
+    action: guardedOpenMnemonic,
+    disabled: mnemonicUnavailable,
     tip: "Mnemonic needs an unsecured memory to buy or copy."
   },
   {
     label: "Shadow Archive - donate memories",
     tag: "LORE",
-    action: openShadow,
-    disabled: () => !hasAnyMemory(),
+    action: guardedOpenShadow,
+    disabled: shadowUnavailable,
     tip: "The Shadow needs an unsecured memory to archive."
   },
   {
     label: "Grey Frequency - scrub heat",
     tag: "INFO",
-    action: openGrey,
-    disabled: () => state.reputation.grey < 2 && !hasAug("ice"),
+    action: guardedOpenGrey,
+    disabled: greyUnavailable,
     tip: "Earn Grey trust or install ICE-piercer to reach Lattice."
   },
   {
     label: "Purity Temple - pray heat down",
     tag: "FAITH",
-    action: openPurity,
-    disabled: () => state.reputation.purity < 1 && state.day < 2,
+    action: guardedOpenPurity,
+    disabled: purityUnavailable,
     tip: "The Temple opens after the first night or when Purity notices you."
   }
 ];
 
 function openMarket() {
   const choices = MARKET_ENTRIES.map(entry => ({ ...entry }));
-  choices.push({ label: "Back", action: enterSafehouse });
+  choices.push({ label: "Back", action: returnToSafehouseMenu });
   setScene({
     title: "// GUTTER-9 MARKET",
     body: [
