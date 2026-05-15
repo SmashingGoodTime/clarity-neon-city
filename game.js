@@ -91,9 +91,11 @@ const AudioLayer = {
     if (ta) ta.volume = this.muted ? 0 : 0.7;
     if (_voiceEl) _voiceEl.volume = this.muted ? 0 : (parseFloat(_voiceEl.dataset.baseVolume) || 0.9);
     this.sfxInstances.forEach(el => { try { el.volume = this.muted ? 0 : (parseFloat(el.dataset.baseVolume) || 0.5); } catch (_) {} });
-    // Reflect in any UI mute buttons
-    const lbl = this.muted ? "♪ UNMUTE" : "♪ MUTE";
-    document.querySelectorAll("#title-mute, #hud-mute").forEach(b => { if (b) b.textContent = lbl; });
+    // Reflect in mute buttons. The title keeps its note marker; the HUD toolbar stays plain.
+    const titleMute = document.querySelector("#title-mute");
+    const hudMute = document.querySelector("#hud-mute");
+    if (titleMute) titleMute.textContent = this.muted ? "♪ UNMUTE" : "♪ MUTE";
+    if (hudMute) hudMute.textContent = this.muted ? "UNMUTE" : "MUTE";
   },
   toggle() { this.setMuted(!this.muted); }
 };
@@ -4967,8 +4969,10 @@ function openToolsMenu() {
   modal.querySelector("#tools-history").addEventListener("click", () => { modal.remove(); openRunHistoryModal(); });
   modal.querySelector("#tools-export").addEventListener("click", () => { modal.remove(); openExportImportModal(); });
   modal.querySelector("#tools-reset").addEventListener("click", () => {
-    modal.remove();
-    if (confirm("Reset progress in the active save slot?")) resetGame();
+    if (confirm("Reset progress in the active save slot?")) {
+      modal.remove();
+      resetGame();
+    }
   });
   modal.querySelector("#tools-close").addEventListener("click", () => modal.remove());
   $("#modal-root").appendChild(modal);
