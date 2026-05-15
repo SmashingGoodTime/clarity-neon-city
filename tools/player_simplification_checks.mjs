@@ -122,5 +122,14 @@ assertContains(css, "#audit-tier-readout.heat-dangerous", "dangerous heat style"
 assertNotContains(game, "COMPLIANCE WATCHER dispatched", "old watcher log copy removed");
 assertNotContains(game, "COMPLIANCE AUDITOR dispatched", "old auditor log copy removed");
 assertNotContains(game, "COMPLIANCE ENFORCEMENT engaged", "old enforcement log copy removed");
+assertContains(game, "function openToolsMenu()", "advanced tools menu");
+assertContains(game, "FIRST RUN", "first run help section");
+assertContains(game, "Advanced systems", "advanced help section");
+assertContains(html, '<button id="btn-more"', "more button in toolbar");
+assertNotContains(html, 'id="btn-history"', "history removed from main toolbar");
+assertNotContains(html, 'id="btn-export"', "export removed from main toolbar");
+assertNotContains(html, 'id="btn-reset"', "reset removed from main toolbar");
+assertContains(html, "style.css?v=31", "css cache bust bumped");
+assertContains(html, "game.js?v=31", "js cache bust bumped");
 
 console.log("player simplification checks passed");

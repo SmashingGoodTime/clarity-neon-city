@@ -4885,13 +4885,13 @@ function showOrientation() {
     portrait: "skyline.jpg",
     title: "// WELCOME TO NEON CITY",
     body: [
-      'Rain has been falling for seven years. The city breathes steam and advertising jingles you never asked to learn.',
-      '<span class="glitch">Here is what you need to know.</span>',
-      '<strong>Memory is currency.</strong> Your inventory \u2014 right sidebar \u2014 is not items. It is the things that happened to you. You trade them, encrypt them, weaponize them.',
-      '<strong>Clarity is survival.</strong> Omni-Corp\'s Compliance Division audits the population by stripping high-clarity memories from your skull. Encrypt what matters, or lose it.',
-      '<strong>Factions want different things.</strong> The Shadow archives you. Mnemonic traffics you. Omni overwrites you. Which of them gets your memory this week is the game.',
-      '<strong>You will end.</strong> Three endings wait \u2014 one reveals what you really are. Play twice.',
-      '<span class="hint">Click through. Choose. See where you land.</span>'
+      "Rain has been falling for seven years. The city breathes steam and advertising jingles you never asked to learn.",
+      '<span class="glitch">FIRST RUN: keep it simple.</span>',
+      '<strong>Take contracts.</strong> Runs bring back memories and raise Omni heat.',
+      '<strong>Memories are your inventory.</strong> Emotion decides what they can buy. Clarity shows how strong they are.',
+      '<strong>Secure what matters.</strong> High heat can strip unsecured memories when you sleep.',
+      '<strong>Sleep moves the city.</strong> Run, manage the stack, visit the Market when you need it, then rest.',
+      '<span class="hint">The deeper systems will surface when they matter.</span>'
     ],
     choices: [{
       label: "Open my eyes.",
@@ -4912,48 +4912,28 @@ function openGlossary() {
       <h2>// GLOSSARY</h2>
       <div class="body" style="font-size:12px; line-height:1.55;">
 
-        <h3 class="gl-h">CORE LOOP</h3>
-        <p><b>Run</b> a contract \u2192 <b>extract</b> memories \u2192 <b>spend</b> them at vendors \u2192 <b>audit</b> catches up \u2192 repeat. Three endings wait at the end.</p>
+        <h3 class="gl-h">FIRST RUN</h3>
+        <p><b>Take a Contract</b>, bring back memories, manage Omni heat, then <b>Sleep</b>. That loop is the game.</p>
 
-        <h3 class="gl-h">MEMORY</h3>
-        <p>Your inventory is the things that happened to you. Each memory has:</p>
+        <h3 class="gl-h">MEMORIES</h3>
+        <p>Your inventory is made of things that happened to you. Click a memory to re-live, encrypt, or burn it.</p>
         <ul class="gl-list">
-          <li><b>Emotion</b> \u2014 Joy / Fear / Rage / Awe / Grief. Drives what vendors will take it.</li>
-          <li><b>Clarity</b> (1\u20135) \u2014 audit resistance. Decays 35%/night unless encrypted.</li>
-          <li><b>Source</b> \u2014 <i>Yours</i> (real), <i>Stolen</i> (extracted), <i>Synthetic</i> (copied, half-clarity, sometimes backdoored).</li>
+          <li><b>Emotion</b> - Joy / Fear / Rage / Awe / Grief. Vendors ask for different emotions.</li>
+          <li><b>Clarity</b> - 1 to 5. Higher clarity is more valuable and more tempting to auditors.</li>
+          <li><b>Security</b> - encrypted memories survive audits and do not decay.</li>
         </ul>
 
-        <h3 class="gl-h">ENCRYPTION</h3>
-        <p>Click a memory \u2192 "Encrypt at safehouse". Spends a low-Clarity memory as cover. Encrypted memories survive audits and don't decay.</p>
+        <h3 class="gl-h">HEAT</h3>
+        <p>Compliance is Omni-Corp's attention. When heat is dangerous, sleeping may cost unsecured memories.</p>
 
-        <h3 class="gl-h">COMPLIANCE</h3>
-        <p>Your Omni-Corp heat. At <b>70%</b> an Auditor is dispatched. On your <b>next sleep</b>, the Auditor strips your highest-Clarity <i>unencrypted</i> memory. Sleep with a full-encrypted stack to shrug them off.</p>
+        <h3 class="gl-h">MARKET</h3>
+        <p>The Market holds the deeper systems: chrome, memory sales, the Shadow archive, Lattice, and Purity. Use it when the main loop gives you a reason.</p>
 
-        <h3 class="gl-h">FACTIONS (6)</h3>
-        <ul class="gl-list">
-          <li><b>The Shadow</b> \u2014 archive. Donate = +Shadow rep, -Compliance.</li>
-          <li><b>Mnemonic Collective</b> \u2014 black market. Sell \u2192 synthetic copy.</li>
-          <li><b>Grey Frequency / Lattice</b> \u2014 info-broker AI. Awe memories buy Compliance scrubs.</li>
-          <li><b>Purity</b> \u2014 anti-chrome cult. Prays scrub Compliance if you're flesh-clean.</li>
-          <li><b>Omni-Corp</b> \u2014 The Project. Pays well, pings you.</li>
-          <li><b>Chrome-Jaws</b> \u2014 cyberware syndicate. Ripperdoc + Droid Boys.</li>
-        </ul>
-
-        <h3 class="gl-h">AUGMENTS (5)</h3>
-        <ul class="gl-list">
-          <li><b>Runner's Cloak</b> (Fear\u00b73) \u2014 \u221225% Compliance gain everywhere.</li>
-          <li><b>Chrome-Jaw Reflex</b> (Rage\u00b74) \u2014 auto-win risky rolls in smuggle/duel contracts.</li>
-          <li><b>Grid Architect ICE-piercer</b> (Awe\u00b74) \u2014 bonus memory on data runs.</li>
-          <li><b>Empathy Dampener</b> (Grief\u00b73) \u2014 Stolen memories decay slower.</li>
-          <li><b>Circuit Shaman Spark</b> (Joy\u00b75) \u2014 absorbs one audit. One-time.</li>
-        </ul>
-        <p style="color:var(--dim);font-size:11px;">Every augment you install drops Purity rep.</p>
-
-        <h3 class="gl-h">ENDINGS</h3>
-        <p>After ~5 runs with any faction at \u00b18, OR by inspecting your starter memory's 'seams' after 3 runs, three doors open: <b>MERGE</b> / <b>ERASE</b> / <b>ARCHIVE</b>. Each unlocks a New Game + mode.</p>
+        <h3 class="gl-h">Advanced systems</h3>
+        <p>Faction standing, vendor trust, memory tags, endings, and New Game+ still exist. They surface through contracts, leads, and the Market after the first few days.</p>
 
         <h3 class="gl-h">KEYS</h3>
-        <p><b>ESC</b> or <b>SPACE</b> skip the intro cinematic. <b>Click anywhere</b> during text reveal to skip the typewriter.</p>
+        <p><b>1-9</b> choose visible actions. <b>H</b> opens Help. <b>M</b> toggles mute. <b>G</b> toggles Sight. <b>Ctrl+S</b> saves. <b>Ctrl+L</b> loads.</p>
 
       </div>
       <div class="actions">
@@ -4966,18 +4946,42 @@ function openGlossary() {
   $("#modal-root").appendChild(modal);
 }
 
+function openToolsMenu() {
+  const modal = document.createElement("div");
+  modal.className = "modal-back";
+  modal.innerHTML = `
+    <div class="modal" style="max-width:520px;">
+      <h2>// MORE TOOLS</h2>
+      <div class="body">
+        <p>Utility tools live here so the main toolbar stays focused on play.</p>
+      </div>
+      <div class="actions">
+        <button class="choice" id="tools-history">Run History</button>
+        <button class="choice" id="tools-export">Export / Import Save</button>
+        <button class="choice danger" id="tools-reset">Reset Slot</button>
+        <button class="choice" id="tools-close">Close</button>
+      </div>
+    </div>
+  `;
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+  modal.querySelector("#tools-history").addEventListener("click", () => { modal.remove(); openRunHistoryModal(); });
+  modal.querySelector("#tools-export").addEventListener("click", () => { modal.remove(); openExportImportModal(); });
+  modal.querySelector("#tools-reset").addEventListener("click", () => {
+    modal.remove();
+    if (confirm("Reset progress in the active save slot?")) resetGame();
+  });
+  modal.querySelector("#tools-close").addEventListener("click", () => modal.remove());
+  $("#modal-root").appendChild(modal);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   $("#btn-save").addEventListener("click", () => openSaveSlotModal("save"));
   $("#btn-load").addEventListener("click", () => openSaveSlotModal("load"));
-  $("#btn-history").addEventListener("click", openRunHistoryModal);
-  $("#btn-export").addEventListener("click", openExportImportModal);
-  $("#btn-reset").addEventListener("click", () => {
-    if (confirm("Reset progress in the active save slot?")) resetGame();
-  });
+  $("#btn-more").addEventListener("click", openToolsMenu);
   $("#btn-help").addEventListener("click", openGlossary);
   const muteBtn = $("#hud-mute");
   if (muteBtn) {
-    muteBtn.textContent = AudioLayer.muted ? "♪ UNMUTE" : "♪ MUTE";
+    muteBtn.textContent = AudioLayer.muted ? "UNMUTE" : "MUTE";
     muteBtn.addEventListener("click", () => { AudioLayer.toggle(); });
   }
   const sightBtn = $("#btn-sight");
