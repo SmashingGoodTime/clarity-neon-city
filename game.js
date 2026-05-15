@@ -650,6 +650,38 @@ function applyMemoryRelationshipEffects(removed) {
 // render() repaints HUD + memory stack + rep + augs from state.
 // Call after any state mutation the player should see.
 // ================================================================
+function heatState(value = state.compliance) {
+  if (state.auditPending || value >= 70) {
+    return {
+      label: "DANGEROUS",
+      className: "heat-dangerous",
+      copy: "Sleep may cost unsecured memories."
+    };
+  }
+  if (value >= 35) {
+    return {
+      label: "RISING",
+      className: "heat-rising",
+      copy: "Omni is paying attention."
+    };
+  }
+  return {
+    label: "LOW",
+    className: "heat-low",
+    copy: "Omni has not locked on."
+  };
+}
+
+function dailyEventsUnlocked() {
+  return state.day >= 3 && state.runsCompleted >= 2;
+}
+
+function chromeWarUnlocked() {
+  return !state.flags.chromeWarActive
+    && state.reputation.mnemonic >= 6
+    && state.runsCompleted >= 5;
+}
+
 function render() {
   // HUD
   $("#name-readout").textContent = `— ${state.operative.name} —`;
@@ -666,13 +698,10 @@ function render() {
   // HUD audit tier indicator
   const tierEl = document.getElementById("audit-tier-readout");
   if (tierEl) {
-    const tier = state.auditTier || 0;
-    const label = tier === 0 ? ""
-                : tier === 1 ? "WATCHER"
-                : tier === 2 ? "AUDITOR DISPATCHED"
-                : "ENFORCEMENT ACTIVE";
-    tierEl.textContent = label;
-    tierEl.className = "sub audit-tier tier-" + tier;
+    const heat = heatState(state.compliance);
+    tierEl.textContent = heat.label;
+    tierEl.className = "sub audit-tier " + heat.className;
+    tierEl.setAttribute("data-tip", heat.copy);
   }
   // Danger pulse at 90%+ capacity
   const capBar = document.getElementById("capacity-bar");
@@ -759,10 +788,12 @@ function renderAugs() {
   });
 }
 
+const SIMPLIFIED_LEAD_LIMIT = 3;
+
 function renderCaseBoard() {
   const el = $("#lead-list");
   if (!el) return;
-  const leads = caseBoardLeads().slice(0, 5);
+  const leads = caseBoardLeads().slice(0, SIMPLIFIED_LEAD_LIMIT);
   if (!leads.length) {
     el.innerHTML = `<div class="hint" style="font-size:11px;">No active leads. Run a contract and make someone nervous.</div>`;
     return;
@@ -809,17 +840,17 @@ function caseBoardLeads() {
                     : tier === 2 ? Math.min(2, victims.length)
                     : Math.min(1, victims.length);
     leads.push({
-      kind: tier >= 3 ? "ENFORCEMENT" : tier === 2 ? "AUDITOR" : "WATCHER",
+      kind: "HEAT",
       tone: "risk",
       text: victims.length
-        ? `Sleep strips ${lossCount} memory${lossCount === 1 ? "" : "ies"}. First target: ${shortHook(victims[0].hook)}.`
-        : "Audit pending, but the whole stack is encrypted."
+        ? `Sleep may cost ${lossCount} unsecured memory${lossCount === 1 ? "" : "ies"}. First at risk: ${shortHook(victims[0].hook)}.`
+        : "Heat is dangerous, but every memory is secured."
     });
   } else if (state.compliance >= 35) {
     leads.push({
       kind: "HEAT",
       tone: "risk",
-      text: `Compliance is ${state.compliance}%. Watcher dispatches at 40%.`
+      text: `Omni heat is ${state.compliance}%. Secure key memories before it spikes.`
     });
   }
 
@@ -832,13 +863,13 @@ function caseBoardLeads() {
     });
   }
 
-  const nextContract = nextLockedContractLead();
+  const nextContract = state.runsCompleted >= 1 ? nextLockedContractLead() : null;
   if (nextContract) leads.push(nextContract);
 
-  const vendorLead = nextVendorTrustLead(trust);
+  const vendorLead = state.runsCompleted >= 3 ? nextVendorTrustLead(trust) : null;
   if (vendorLead) leads.push(vendorLead);
 
-  const memoryLead = nextMemoryGoalLead();
+  const memoryLead = state.runsCompleted >= 3 ? nextMemoryGoalLead() : null;
   if (memoryLead) leads.push(memoryLead);
 
   const starter = memories.find(m => m.starter === true || (m.hook && m.hook.includes("woman who raised you")));
@@ -1404,14 +1435,14 @@ function enterSafehouse() {
   maybeTriggerEndgame();
 
   // Chrome-Jaws war trigger: high Mnemonic rep brings Duchess Rend to your door
-  if (!state.flags.chromeWarActive && state.reputation.mnemonic >= 6 && state.runsCompleted >= 3) {
+  if (chromeWarUnlocked()) {
     state.flags.chromeWarActive = true;
     setTimeout(triggerChromeWarIntro, 500);
     return;
   }
 
   // Daily event — fires once per calendar day
-  if (state.flags.lastEventDay !== state.day && Math.random() < 0.55) {
+  if (dailyEventsUnlocked() && state.flags.lastEventDay !== state.day && Math.random() < 0.55) {
     state.flags.lastEventDay = state.day;
     const ev = pickDailyEvent();
     if (ev) { ev(); return; }
@@ -2800,9 +2831,9 @@ function complianceTick(amount) {
     state.auditTier = newTier;
     state.auditPending = newTier >= 1;
     sensoryFlash("audit");
-    if (newTier === 1) log("// COMPLIANCE WATCHER dispatched. Low-level surveillance is on you.", "warn");
-    else if (newTier === 2) { log("// COMPLIANCE AUDITOR dispatched. Sleep and they will strike.", "bad"); playSFX("sfx_audit_alarm.mp3", 0.75); }
-    else if (newTier === 3) { log("// COMPLIANCE ENFORCEMENT engaged. This is not a drill.", "bad"); playSFX("sfx_audit_alarm.mp3", 1.0); }
+    const heat = heatState(state.compliance);
+    log(`// OMNI HEAT ${heat.label}. ${heat.copy}`, newTier >= 2 ? "bad" : "warn");
+    if (newTier >= 2) playSFX("sfx_audit_alarm.mp3", newTier === 3 ? 1.0 : 0.75);
   }
   render();
 }

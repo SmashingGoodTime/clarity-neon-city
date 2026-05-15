@@ -1244,9 +1244,9 @@ body.showing-title #toolbar { display: none !important; }
 /* ---------- New-feature polish ---------- */
 /* Audit tier readout under the Compliance bar — colors by escalation. */
 #audit-tier-readout { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
-#audit-tier-readout.tier-1 { color: #ffcc66; text-shadow: 0 0 4px #ffcc6688; }
-#audit-tier-readout.tier-2 { color: #ff6464; text-shadow: 0 0 6px #ff646488; }
-#audit-tier-readout.tier-3 { color: #ff3030; text-shadow: 0 0 10px #ff3030cc; animation: tier3Pulse 1.2s steps(2) infinite; }
+#audit-tier-readout.heat-low { color: #9fdcff; text-shadow: 0 0 4px #9fdcff66; }
+#audit-tier-readout.heat-rising { color: #ffcc66; text-shadow: 0 0 5px #ffcc6688; }
+#audit-tier-readout.heat-dangerous { color: #ff6464; text-shadow: 0 0 8px #ff646499; animation: tier3Pulse 1.2s steps(2) infinite; }
 @keyframes tier3Pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
 
 /* Capacity bar danger state (overflow-adjacent) */

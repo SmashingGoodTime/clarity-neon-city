@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const game = fs.readFileSync(path.join(root, "game.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const css = fs.readFileSync(path.join(root, "style.css"), "utf8");
 
 function assertContains(source, needle, label) {
   if (!source.includes(needle)) {
@@ -108,5 +109,18 @@ assertFunctionContains(game, "primaryContractPostings", "add(nonStory.find(c => 
 assertStoryPriorityOutranks(game, "droidboy_rankclimb", "purity_cleanse");
 assertStoryPriorityOutranks(game, "compliance_heist", "purity_cleanse");
 assertStoryPriorityOutranks(game, "omni_sabotage", "purity_cleanse");
+assertContains(game, "function heatState(value = state.compliance)", "heat state helper");
+assertContains(game, "LOW", "low heat label");
+assertContains(game, "RISING", "rising heat label");
+assertContains(game, "DANGEROUS", "dangerous heat label");
+assertContains(game, "const SIMPLIFIED_LEAD_LIMIT = 3", "case board lead limit");
+assertContains(game, "function dailyEventsUnlocked()", "daily event gate");
+assertContains(game, "function chromeWarUnlocked()", "chrome war gate");
+assertContains(css, "#audit-tier-readout.heat-low", "low heat style");
+assertContains(css, "#audit-tier-readout.heat-rising", "rising heat style");
+assertContains(css, "#audit-tier-readout.heat-dangerous", "dangerous heat style");
+assertNotContains(game, "COMPLIANCE WATCHER dispatched", "old watcher log copy removed");
+assertNotContains(game, "COMPLIANCE AUDITOR dispatched", "old auditor log copy removed");
+assertNotContains(game, "COMPLIANCE ENFORCEMENT engaged", "old enforcement log copy removed");
 
 console.log("player simplification checks passed");
