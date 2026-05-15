@@ -1191,6 +1191,135 @@ function glitchScene() {
 // Home base. Gutter-9 apartment. Entry point to every other screen.
 // Daily events roll here probabilistically after day 2.
 // ================================================================
+function hasAnyMemory() {
+  return state.memories.length > 0;
+}
+
+function marketIsUseful() {
+  return hasAnyMemory()
+    || state.reputation.grey >= 2
+    || hasAug("ice")
+    || state.reputation.purity >= 1
+    || state.day >= 2;
+}
+
+function safehouseBody() {
+  const heat = typeof heatState === "function" ? heatState(state.compliance) : null;
+  const heatLine = heat && heat.label !== "LOW"
+    ? `Omni heat is ${heat.label.toLowerCase()}. Secure what matters before sleep.`
+    : "Gutter-9 is quiet. For now.";
+  return [
+    "Rain drums on the corrugated roof. A dozen tiny red LEDs blink from the deck on your workbench.",
+    heatLine
+  ];
+}
+
+function safehouseChoices() {
+  return [
+    { label: "Take a Contract", tag: "RUN", action: openContractBoard },
+    {
+      label: "Manage Memories",
+      tag: "MEMORY",
+      action: openManageMemories,
+      disabled: () => !hasAnyMemory(),
+      tip: "Run a contract first. You need at least one memory to manage."
+    },
+    {
+      label: "Visit the Market",
+      tag: "MARKET",
+      action: openMarket,
+      disabled: () => !marketIsUseful(),
+      tip: "The Market opens after you have a memory, a contact, or a little time in the city."
+    },
+    { label: "Sleep", tag: "END DAY", action: endDay },
+    { label: "Help", tag: "INFO", action: openGlossary }
+  ];
+}
+
+function renderSafehouseScene() {
+  setScene({
+    title: `DAY ${String(state.day).padStart(2, "0")} // SAFEHOUSE`,
+    body: safehouseBody(),
+    choices: safehouseChoices()
+  });
+}
+
+function openManageMemories() {
+  if (!hasAnyMemory()) {
+    log("// Your stack is empty. Take a contract first.", "warn");
+    return;
+  }
+  const choices = state.memories
+    .slice()
+    .sort((a, b) => b.clarity - a.clarity)
+    .slice(0, 6)
+    .map(m => ({
+      label: `Inspect "${shortHook(m.hook, 38)}"`,
+      tag: `${m.emotion} ${m.clarity}`,
+      action: () => openMemoryModal(m)
+    }));
+  choices.push({ label: "Back", action: enterSafehouse });
+  setScene({
+    title: "// MEMORY CARE",
+    body: [
+      "Your stack flickers across the workbench.",
+      "Inspect a memory to re-live, encrypt, or burn it. Encrypted memories survive audits and do not decay."
+    ],
+    choices
+  });
+}
+
+const MARKET_ENTRIES = [
+  {
+    label: "Ripperdoc - buy chrome",
+    tag: "SPEND",
+    action: openRipperdoc,
+    disabled: () => !hasAnyMemory() || (state.flags.chromeWarActive && !state.flags.chromeWarResolved),
+    tip: "Chrome costs memories. The Ripperdoc is unavailable during an active Chrome-Jaws war."
+  },
+  {
+    label: "Mnemonic Lab - sell or copy memories",
+    tag: "TRADE",
+    action: openMnemonic,
+    disabled: () => !hasAnyMemory(),
+    tip: "Mnemonic needs an unsecured memory to buy or copy."
+  },
+  {
+    label: "Shadow Archive - donate memories",
+    tag: "LORE",
+    action: openShadow,
+    disabled: () => !hasAnyMemory(),
+    tip: "The Shadow needs an unsecured memory to archive."
+  },
+  {
+    label: "Grey Frequency - scrub heat",
+    tag: "INFO",
+    action: openGrey,
+    disabled: () => state.reputation.grey < 2 && !hasAug("ice"),
+    tip: "Earn Grey trust or install ICE-piercer to reach Lattice."
+  },
+  {
+    label: "Purity Temple - pray heat down",
+    tag: "FAITH",
+    action: openPurity,
+    disabled: () => state.reputation.purity < 1 && state.day < 2,
+    tip: "The Temple opens after the first night or when Purity notices you."
+  }
+];
+
+function openMarket() {
+  const choices = MARKET_ENTRIES.map(entry => ({ ...entry }));
+  choices.push({ label: "Back", action: enterSafehouse });
+  setScene({
+    title: "// GUTTER-9 MARKET",
+    body: [
+      "A single alley splits into five kinds of trouble.",
+      "Pick a contact when you need one. Ignore the rest until the city gives you a reason."
+    ],
+    choices
+  });
+}
+
 function enterSafehouse() {
   state.location = "safehouse";
   playBGM("safehouse_ambient.mp3");
@@ -1214,56 +1343,7 @@ function enterSafehouse() {
     if (ev) { ev(); return; }
   }
 
-  const hasMemories = state.memories.length > 0;
-  setScene({
-    title: `DAY ${String(state.day).padStart(2,"0")} // SAFEHOUSE`,
-    body: [
-      "Rain drums on the corrugated roof. A dozen tiny red LEDs blink from the deck on your workbench.",
-      "Gutter-9 is quiet. For now."
-    ],
-    choices: [
-      {
-        label: "Check the contract board",
-        tag: "RUN",
-        action: openContractBoard
-      },
-      {
-        label: "Visit the Ripperdoc",
-        tag: "SPEND",
-        action: openRipperdoc,
-        disabled: () => !hasMemories || (state.flags.chromeWarActive && !state.flags.chromeWarResolved)
-      },
-      {
-        label: "Route through Mnemonic Lab",
-        tag: "TRADE",
-        action: openMnemonic,
-        disabled: () => !hasMemories
-      },
-      {
-        label: "Drop off at The Shadow Archive",
-        tag: "LORE",
-        action: openShadow,
-        disabled: () => !hasMemories
-      },
-      {
-        label: "Ping the Grey Frequency",
-        tag: "INFO",
-        action: openGrey,
-        disabled: () => state.reputation.grey < 2 && !hasAug("ice")
-      },
-      {
-        label: "Visit the Purity Temple",
-        tag: "FAITH",
-        action: openPurity,
-        disabled: () => state.reputation.purity < 1 && state.day < 2
-      },
-      {
-        label: "Tune the deck and sleep",
-        tag: "END DAY",
-        action: endDay
-      }
-    ]
-  });
+  renderSafehouseScene();
 }
 
 // ================================================================
@@ -4453,26 +4533,9 @@ function pickDailyEvent() {
 }
 
 function enterSafehouseAfterEvent() {
-  // Return to the normal safehouse view without re-firing events
   state.location = "safehouse";
   render();
-  const hasMemories = state.memories.length > 0;
-  setScene({
-    title: `DAY ${String(state.day).padStart(2,"0")} // SAFEHOUSE`,
-    body: [
-      "Rain drums on the corrugated roof. A dozen tiny red LEDs blink from the deck on your workbench.",
-      "Gutter-9 is quiet. For now."
-    ],
-    choices: [
-      { label: "Check the contract board", tag: "RUN", action: openContractBoard },
-      { label: "Visit the Ripperdoc", tag: "SPEND", action: openRipperdoc, disabled: () => !hasMemories || (state.flags.chromeWarActive && !state.flags.chromeWarResolved) },
-      { label: "Route through Mnemonic Lab", tag: "TRADE", action: openMnemonic, disabled: () => !hasMemories },
-      { label: "Drop off at The Shadow Archive", tag: "LORE", action: openShadow, disabled: () => !hasMemories },
-      { label: "Ping the Grey Frequency", tag: "INFO", action: openGrey, disabled: () => state.reputation.grey < 2 && !hasAug("ice") },
-      { label: "Visit the Purity Temple", tag: "FAITH", action: openPurity, disabled: () => state.reputation.purity < 1 && state.day < 2 },
-      { label: "Tune the deck and sleep", tag: "END DAY", action: endDay }
-    ]
-  });
+  renderSafehouseScene();
 }
 
 // ================================================================
