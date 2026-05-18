@@ -564,17 +564,17 @@ function addMemory(mem) {
   return true;
 }
 
+// Single seam for memory removal. All paths (vendor, audit, arc, sermon, etc.)
+// must go through this so cascade rules stay consistent.
 function removeMemory(id) {
   const idx = state.memories.findIndex(m => m.id === id);
-  if (idx >= 0) {
-    const [m] = state.memories.splice(idx, 1);
-    trackStat("memoriesLost", 1);
-    recordConsequence("MEMORY LOST", `${shortHook(m.hook)} left your stack.`, "warn");
-    applyMemoryRelationshipEffects(m);
-    render();
-    return m;
-  }
-  return null;
+  if (idx < 0) return null;
+  const [m] = state.memories.splice(idx, 1);
+  trackStat("memoriesLost", 1);
+  recordConsequence("MEMORY LOST", `${shortHook(m.hook)} left your stack.`, "warn");
+  applyMemoryCascade(planMemoryCascade(m, state.memories));
+  render();
+  return m;
 }
 
 // ================================================================
@@ -629,29 +629,40 @@ function sensoryFlash(kind) {
   setTimeout(() => crt.classList.remove(`flash-${kind}`), 700);
 }
 
-function applyMemoryRelationshipEffects(removed) {
-  if (!removed || !state.memories.length) return;
+// Pure: returns { targetId, newClarity, hook } or null. Does not mutate.
+// rng/picker injectable so callers can preview cascades or test deterministically.
+function planMemoryCascade(removed, memories, rng = Math.random, pick = rand) {
+  if (!removed || !memories || !memories.length) return null;
   const tags = new Set(removed.tags || []);
   if (removed.starter) tags.add("Childhood");
-  const linked = state.memories.filter(m =>
+  const linked = memories.filter(m =>
     !m.encrypted &&
     m.clarity > 1 &&
     (m.emotion === removed.emotion || (m.tags || []).some(t => tags.has(t)))
   );
-  if (!linked.length || Math.random() > 0.38) return;
-  const target = rand(linked);
-  target.clarity = Math.max(1, target.clarity - 1);
-  recordConsequence("ECHO DAMAGE", `${shortHook(target.hook)} lost 1 Clarity after a related memory vanished.`, "warn");
-  log(`// ECHO DAMAGE: "${target.hook}" destabilized after a related memory vanished.`, "warn");
+  if (!linked.length || rng() > 0.38) return null;
+  const target = pick(linked);
+  return { targetId: target.id, newClarity: Math.max(1, target.clarity - 1), hook: target.hook };
+}
+
+function applyMemoryCascade(plan) {
+  if (!plan) return;
+  const m = state.memories.find(x => x.id === plan.targetId);
+  if (!m) return;
+  m.clarity = plan.newClarity;
+  recordConsequence("ECHO DAMAGE", `${shortHook(m.hook)} lost 1 Clarity after a related memory vanished.`, "warn");
+  log(`// ECHO DAMAGE: "${m.hook}" destabilized after a related memory vanished.`, "warn");
 }
 
 // ================================================================
 // ==== RENDER ====
-// render() repaints HUD + memory stack + rep + augs from state.
-// Call after any state mutation the player should see.
+// The CRT is split into 5 subsystems: hud, stack, rep, augs, leads.
+// Each has a function and a key in RENDER_TARGETS. render() repaints
+// everything (the safe default). Callers that know which slice changed
+// can call renderTargets(["stack", "hud"]) to skip the rest — useful
+// when state mutates in tight loops or during typewriter reveal.
 // ================================================================
-function render() {
-  // HUD
+function renderHud() {
   $("#name-readout").textContent = `— ${state.operative.name} —`;
   $("#origin-readout").textContent = `${state.operative.origin} // ${state.operative.path}`;
   $("#day-readout").textContent = String(state.day).padStart(2, "0");
@@ -677,8 +688,9 @@ function render() {
   // Danger pulse at 90%+ capacity
   const capBar = document.getElementById("capacity-bar");
   if (capBar) capBar.classList.toggle("danger", (state.memories.length / state.capacity) >= 0.9);
+}
 
-  // Memories
+function renderStack() {
   const ml = $("#memory-list");
   ml.innerHTML = "";
   if (state.memories.length === 0) {
@@ -701,14 +713,31 @@ function render() {
     el.addEventListener("click", () => openMemoryModal(m));
     ml.appendChild(el);
   });
+}
 
-  // Reputation
+const RENDER_TARGETS = {
+  hud:   renderHud,
+  stack: renderStack,
+  rep:   () => renderRep(),
+  augs:  () => renderAugs(),
+  leads: () => renderCaseBoard()
+};
+
+// Selectively repaint subsystems. Pass an array of target keys; unknown keys
+// are silently skipped. Use this when only one subsystem can have changed
+// (e.g. a pure compliance tick → ["hud", "leads"]).
+function renderTargets(targets) {
+  (targets || []).forEach(t => {
+    const fn = RENDER_TARGETS[t];
+    if (fn) fn();
+  });
+}
+
+function render() {
+  renderHud();
+  renderStack();
   renderRep();
-
-  // Augments
   renderAugs();
-
-  // Case board
   renderCaseBoard();
 }
 
@@ -1091,9 +1120,45 @@ const EMOTION_TIPS = {
 // ==== SCENE ====
 // Every "screen" — safehouse menu, vendor, contract arc — is a scene.
 // setScene({ title, body, choices, portrait, faction, voice, cmd })
-// owns the feed panel and choice buttons. Choices support { disabled,
-// tag, risk } for gating and styling.
+// owns the feed panel and choice buttons.
+//
+// Choice schema (the contract every caller honors):
+//   { label:    string                — required, rendered text
+//     action:   () => void            — required, click handler (also fired on disabled)
+//     tag?:     string                — small label after the choice; auto-tooltipped via tipForTag
+//     disabled?: bool | () => bool    — function form is evaluated at render time
+//     risk?:    bool                  — adds the .risk class for ominous styling
+//     tip?:     string                — fallback tooltip when disabled and tag has no tip
+//   }
 // ================================================================
+
+// Resolve a choice's disabled flag (function form re-evaluated each render).
+function isChoiceDisabled(c) {
+  return typeof c.disabled === "function" ? !!c.disabled() : !!c.disabled;
+}
+
+// Build the DOM element for one choice. Pure-ish: depends only on the choice
+// data and tipForTag — no other scene state.
+function renderChoice(c) {
+  const btn = document.createElement("button");
+  btn.className = "choice" + (c.risk ? " risk" : "");
+  const tagTip = c.tag ? tipForTag(c.tag) : null;
+  btn.innerHTML = `${c.label}${c.tag ? `<span class="tag"${tagTip ? ` data-tip="${escapeHtml(tagTip)}"` : ""}>${c.tag}</span>` : ""}`;
+  const disabled = isChoiceDisabled(c);
+  btn.addEventListener("click", () => {
+    // Note: action also fires when disabled — many call sites use this as a
+    // way to log "you can't do this because…". Don't change without auditing.
+    if (typeof c.action === "function") c.action();
+  });
+  if (disabled) {
+    btn.classList.add("disabled");
+    btn.style.opacity = 0.5;
+    btn.style.cursor = "not-allowed";
+    if (c.tip) btn.setAttribute("data-tip", c.tip);
+  }
+  return btn;
+}
+
 function setScene({ title, body, choices, portrait, faction, voice, cmd }) {
   // Update the terminal prompt line above the scene
   const promptEl = $("#scene-prompt");
@@ -1130,24 +1195,7 @@ function setScene({ title, body, choices, portrait, faction, voice, cmd }) {
 
   const cc = $("#scene-choices");
   cc.innerHTML = "";
-  (choices || []).forEach(c => {
-    const btn = document.createElement("button");
-    btn.className = "choice" + (c.risk ? " risk" : "");
-    const tagTip = c.tag ? tipForTag(c.tag) : null;
-    btn.innerHTML = `${c.label}${c.tag ? `<span class="tag"${tagTip ? ` data-tip="${escapeHtml(tagTip)}"` : ""}>${c.tag}</span>` : ""}`;
-    const isDisabled = typeof c.disabled === "function" ? c.disabled() : !!c.disabled;
-    btn.addEventListener("click", () => {
-      if (isDisabled) { if (typeof c.action === "function") c.action(); return; }
-      c.action();
-    });
-    if (isDisabled) {
-      btn.classList.add("disabled");
-      btn.style.opacity = 0.5;
-      btn.style.cursor = "not-allowed";
-      if (c.tip) btn.setAttribute("data-tip", c.tip);
-    }
-    cc.appendChild(btn);
-  });
+  (choices || []).forEach(c => cc.appendChild(renderChoice(c)));
 
   // Typewriter reveal of the story text — click/tap anywhere to skip.
   if (typerTargets.length) typewriterReveal(typerTargets, 12);
@@ -1674,10 +1722,65 @@ function snapshotReportFlags() {
 }
 
 // ================================================================
+// ==== STATE GATEWAY ====
+// Narrow seams for the mutations that get repeated everywhere. Each one
+// owns its invariant (clamping, normalization) so the rule lives in one
+// place. New code should prefer these over raw `state.x = ...` writes;
+// existing call sites can migrate opportunistically.
+//
+// Currently defined:
+//   gainRep(faction, delta)         — clamps to [-faction.max, +faction.max]
+//   gainCompliance(delta)           — clamps to [0, 100], also tracks max stat
+//   setFlag(key, value)             — single-write seam for state.flags.*
+//   gainNamedMemory({...})          — randomMemory + hook override + addMemory
+//   endRunWith(c, complianceCost, text) — complianceTick + endRun
+// ================================================================
+
+// Apply a reputation delta with the canonical clamp from FACTIONS.
+function gainRep(faction, delta) {
+  if (!(faction in state.reputation)) return;
+  const max = (FACTIONS.find(f => f.key === faction) || { max: 10 }).max;
+  state.reputation[faction] = Math.max(-max, Math.min(max, state.reputation[faction] + delta));
+}
+
+// Apply a compliance delta with the [0, 100] clamp + highestCompliance stat.
+// Note: this is the *raw* setter. Use complianceTick() when you want augments
+// (cloak, sanctum) and contract modifiers to scale the gain.
+function gainCompliance(delta) {
+  state.compliance = Math.max(0, Math.min(100, state.compliance + delta));
+  trackStat("highestCompliance", state.compliance, "max");
+}
+
+// Single seam for writing flags. Callers should prefer this over
+// `state.flags.x = y` so that the set of valid flags stays discoverable.
+function setFlag(key, value) {
+  state.flags = state.flags || {};
+  state.flags[key] = value;
+}
+
+// Build + add a memory with a custom hook in one step.
+function gainNamedMemory({ emotion, clarity, hook, source = "Yours", backdoor = false }) {
+  const m = randomMemory({ emotion, clarity, source });
+  if (hook) m.hook = hook;
+  if (backdoor) m.backdoor = true;
+  addMemory(m);
+  return m;
+}
+
+// Bundle compliance tick + endRun, the closing pair of every contract choice.
+function endRunWith(c, complianceCost, text) {
+  complianceTick(complianceCost);
+  endRun(c, text);
+}
+
+// ================================================================
 // ==== ARCS ====
 // Each contract has a single arc function keyed by id. Arcs own
 // their scene tree and call endRun(c, text) to exit. Compliance
 // gain flows through complianceTick so augments + sanctum modify it.
+// New arcs should compose the State Gateway helpers (gainRep,
+// gainCompliance, gainNamedMemory, endRunWith) rather than mutating
+// state.reputation and addMemory directly.
 // ================================================================
 const ARCS = {
   gutterSalvage(c) {
@@ -1692,16 +1795,12 @@ const ARCS = {
         {
           label: "Wade straight to the core",
           action: () => {
-            const m = randomMemory({ emotion: rand(["Fear", "Grief"]), clarity: 3 });
-            addMemory(m);
+            gainNamedMemory({ emotion: rand(["Fear", "Grief"]), clarity: 3 });
             if (hasAug("ice")) {
-              const bonus = randomMemory({ emotion: "Awe", clarity: 2 });
-              bonus.hook = "A fragment of the tunnel's own memory of being built";
-              addMemory(bonus);
+              gainNamedMemory({ emotion: "Awe", clarity: 2, hook: "A fragment of the tunnel's own memory of being built" });
               log("// ICE-PIERCER: bonus memory extracted.", "ok");
             }
-            complianceTick(c.compliance);
-            endRun(c, "You grab the core and slosh back out.");
+            endRunWith(c, c.compliance, "You grab the core and slosh back out.");
           }
         },
         {
@@ -1712,13 +1811,9 @@ const ARCS = {
             document.body.classList.add("sight-active");
             setTimeout(() => { state.sightActive = false; document.body.classList.remove("sight-active"); }, 3000);
             log("// Reso's overlay unfolds. Hidden echoes bleed through the walls.", "lore");
-            const echo = randomMemory({ emotion: "Awe", clarity: 4 });
-            echo.hook = "An echo of a drowned technician — their last morning";
-            addMemory(echo);
-            const m = randomMemory({ emotion: "Fear", clarity: 3 });
-            addMemory(m);
-            complianceTick(c.compliance + 2);
-            endRun(c, "The tunnel remembers you back. You surface shaking.");
+            gainNamedMemory({ emotion: "Awe", clarity: 4, hook: "An echo of a drowned technician — their last morning" });
+            gainNamedMemory({ emotion: "Fear", clarity: 3 });
+            endRunWith(c, c.compliance + 2, "The tunnel remembers you back. You surface shaking.");
           }
         },
         {
@@ -2631,6 +2726,65 @@ function auditPriority(memories) {
   });
 }
 
+// Pure: returns a plan describing what an audit at `tier` would do given
+// the current memory list and whether the Spark augment is available to
+// absorb it. Does not mutate state. UI can preview audits with this.
+function planAudit(memories, tier, opts = {}) {
+  if (opts.sparkAvailable) {
+    return { kind: "absorbed", strippedIds: [], complianceRebound: 50, vendorTrustHit: false, lockBoardNextDay: false };
+  }
+  const victims = auditPriority((memories || []).filter(m => !m.encrypted));
+  if (!victims.length) {
+    return { kind: "empty", strippedIds: [], complianceRebound: 40, vendorTrustHit: false, lockBoardNextDay: false };
+  }
+  let losses;
+  if (tier >= 3) losses = Math.max(1, Math.ceil(victims.length / 2));
+  else if (tier === 2) losses = Math.min(2, victims.length);
+  else losses = 1;
+  const strippedIds = victims.slice(0, losses).map(m => ({
+    id: m.id,
+    hook: m.hook,
+    flavor: m.backdoor ? "[PING TRACED]"
+          : m.source === "Stolen" ? "[FLAGGED AS STOLEN]"
+          : "[HIGHEST CLARITY]"
+  }));
+  return {
+    kind: tier >= 3 ? "enforcement" : tier === 2 ? "auditor" : "watcher",
+    strippedIds,
+    complianceRebound: tier >= 3 ? 25 : tier === 2 ? 45 : 30,
+    vendorTrustHit: tier >= 3,
+    lockBoardNextDay: tier === 2
+  };
+}
+
+// Apply a plan to live state. Each side effect maps to one plan field.
+function applyAuditPlan(plan) {
+  if (plan.kind === "absorbed") {
+    state.augCharges.spark = 0;
+    log("// SPARK ABSORBED the audit. The Auditor walks past your door.", "ok");
+  } else if (plan.kind === "empty") {
+    log("// Your stack is fully encrypted. They leave empty-handed.", "ok");
+  } else {
+    plan.strippedIds.forEach(s => {
+      removeMemory(s.id);
+      log(`// AUDITED ${s.flavor}: "${s.hook}".`, "bad");
+    });
+    if (plan.vendorTrustHit) {
+      Object.keys(state.flags.vendorTrust || {}).forEach(k => {
+        state.flags.vendorTrust[k] = Math.max(0, (state.flags.vendorTrust[k] || 0) - 1);
+      });
+      log("// Enforcement broadcast your face to every vendor. Trust burned.", "bad");
+    }
+    if (plan.lockBoardNextDay) {
+      state.flags.boardLockedDay = state.day + 1;
+      log("// The Auditor filed a detainment notice. Contract board sealed tomorrow.", "warn");
+    }
+  }
+  state.compliance = Math.max(0, state.compliance - plan.complianceRebound);
+  state.auditPending = false;
+  state.auditTier = plan.kind === "absorbed" || plan.kind === "empty" ? 0 : computeAuditTier(state.compliance);
+}
+
 function runAuditIfDue() {
   if (!state.auditPending) return false;
   const tier = state.auditTier || 1;
@@ -2641,59 +2795,10 @@ function runAuditIfDue() {
   playSFX("sfx_audit_alarm.mp3", 0.8);
   log(`// AUDIT TIER ${tier} — the ${["Watcher","Auditor","Enforcement squad"][tier-1] || "Auditor"} has arrived.`, "bad");
 
-  // Spark augment: absorb one audit
-  if (hasAug("spark") && state.augCharges.spark !== 0) {
-    state.augCharges.spark = 0;
-    state.auditPending = false;
-    state.auditTier = 0;
-    state.compliance = Math.max(0, state.compliance - 50);
-    log("// SPARK ABSORBED the audit. The Auditor walks past your door.", "ok");
-    render();
-    return true;
-  }
-
-  const victims = auditPriority(state.memories.filter(m => !m.encrypted));
-  if (victims.length === 0) {
-    log("// Your stack is fully encrypted. They leave empty-handed.", "ok");
-    state.auditPending = false;
-    state.auditTier = 0;
-    state.compliance = Math.max(0, state.compliance - 40);
-    render();
-    return true;
-  }
-
-  let losses;
-  if (tier >= 3) losses = Math.max(1, Math.ceil(victims.length / 2));
-  else if (tier === 2) losses = Math.min(2, victims.length);
-  else losses = 1;
-
-  const stripped = victims.slice(0, losses);
-  stripped.forEach(target => {
-    removeMemory(target.id);
-    const flavor = target.backdoor ? "[PING TRACED]"
-                 : target.source === "Stolen" ? "[FLAGGED AS STOLEN]"
-                 : "[HIGHEST CLARITY]";
-    log(`// AUDITED ${flavor}: "${target.hook}".`, "bad");
+  const plan = planAudit(state.memories, tier, {
+    sparkAvailable: hasAug("spark") && state.augCharges.spark !== 0
   });
-
-  if (tier >= 3) {
-    // Enforcement: vendor trust hit + compliance only partially scrubs
-    Object.keys(state.flags.vendorTrust || {}).forEach(k => {
-      state.flags.vendorTrust[k] = Math.max(0, (state.flags.vendorTrust[k] || 0) - 1);
-    });
-    state.compliance = Math.max(0, state.compliance - 25);
-    log("// Enforcement broadcast your face to every vendor. Trust burned.", "bad");
-  } else if (tier === 2) {
-    // Auditor: contract board locked for the next day
-    state.flags.boardLockedDay = state.day + 1;
-    state.compliance = Math.max(0, state.compliance - 45);
-    log("// The Auditor filed a detainment notice. Contract board sealed tomorrow.", "warn");
-  } else {
-    state.compliance = Math.max(0, state.compliance - 30);
-  }
-
-  state.auditPending = false;
-  state.auditTier = computeAuditTier(state.compliance);
+  applyAuditPlan(plan);
   render();
   return true;
 }
@@ -2930,9 +3035,10 @@ function openMemoryModal(m) {
 // Ripperdoc, Mnemonic, Shadow, Grey, Purity. Each has per-vendor
 // trust that unlocks perks at tier 3 and tier 5. bumpTrust(key, n)
 // increments, trustLevel(key) reads.
+// VENDORS holds the static scene shell (portrait, faction, body);
+// each open* function builds its recipe list and hands it to renderVendor,
+// the single seam that sets location, renders the HUD, and calls setScene.
 // ================================================================
-// Vendor trust tiers: every successful trade/donation/install increments a
-// per-vendor counter. Trust 3+ unlocks barter or intel at each vendor.
 function trustLevel(key) { return (state.flags.vendorTrust && state.flags.vendorTrust[key]) || 0; }
 function bumpTrust(key, n = 1) {
   state.flags.vendorTrust = state.flags.vendorTrust || {};
@@ -2951,17 +3057,79 @@ function findTaggedMemory({ emotion, clarity = 1, tags = [], source = null }) {
   );
 }
 
-function openRipperdoc() {
-  state.location = "ripperdoc";
+const VENDORS = {
+  ripperdoc: {
+    portrait: "duchess_rend.jpg", faction: "chromejaw",
+    title: "// RIPPERDOC // BACK ALLEY",
+    body: (trust) => [
+      "Grease and neon. The doc doesn't look up from her surgical lathe.",
+      '"Pay in memory, not cred. You know how this works."',
+      trust >= 3 ? `<span class="hint" style="color:var(--neon-g);">She nods — you've earned a barter tier (trust ${trust}).</span>` : ''
+    ]
+  },
+  mnemonic: {
+    portrait: "mnemonic.jpg", faction: "mnemonic",
+    title: "// MNEMONIC LAB // NEON-7",
+    body: (trust) => [
+      "Glass walls. Patients floating in fluid, dreaming strangers' lives.",
+      "The buyer will purchase a memory — but a synthetic copy returns, half-Clarity.",
+      trust >= 3 ? `<span class="hint" style="color:var(--neon-g);">Your trust is known here (${trust}). Commissioned work is on offer.</span>` : ''
+    ]
+  },
+  shadow: {
+    portrait: "archivist.jpg", faction: "shadow",
+    title: "// THE SHADOW ARCHIVE",
+    body: (trust) => [
+      "A candlelit backroom behind a noodle shop. An archivist in a hood logs every story into a tape deck older than you.",
+      "Donations earn no credit. Only a place in the record.",
+      trust >= 3 ? `<span class="hint" style="color:var(--neon-g);">The hood tips — you have storage privileges (trust ${trust}).</span>` : ''
+    ]
+  },
+  grey: {
+    portrait: "lattice_ai.jpg", faction: "grey", voice: "tts_lattice.mp3",
+    title: "// THE GREY FREQUENCY",
+    body: (trust, ctx) => [
+      "Lattice's voice comes through warm static. It sounds more human every week.",
+      `<span class="glitch">${ctx.tip}</span>`,
+      "\"I won't give you more today. I know what you'd do with it.\"",
+      trust >= 3 ? `<span class="hint" style="color:var(--neon-g);">Lattice knows you now (${trust}). Favors are available.</span>` : ''
+    ]
+  },
+  purity: {
+    portrait: "kael.jpg", faction: "purity", voice: "tts_kael.mp3",
+    title: "// PURITY TEMPLE // OLD CATHEDRAL",
+    body: (trust, ctx) => [
+      "Candles. Unpainted wood. The smell of nobody's neural implants.",
+      ctx.hypocriteLine,
+      trust >= 5 ? '<span class="hint">The Sanctum door stands open.</span>' : ''
+    ]
+  }
+};
+
+// Single seam for vendor scenes: location, HUD render, scene shell, Leave choice.
+function renderVendor(id, recipes, ctx = {}) {
+  state.location = id;
   render();
+  const def = VENDORS[id];
+  const trust = trustLevel(id);
+  recipes.push({ label: "Leave", action: enterSafehouse });
+  setScene({
+    portrait: def.portrait,
+    faction: def.faction,
+    voice: def.voice,
+    title: def.title,
+    body: def.body(trust, ctx).filter(Boolean),
+    choices: recipes
+  });
+}
+
+function openRipperdoc() {
   const trust = trustLevel("ripperdoc");
-  const choices = [
-    ...AUGMENTS.filter(a => !hasAug(a.id)).map(a => ({
-      label: `${a.name} — pay ${a.cost.emotion} · Clarity ≥ ${a.cost.clarity}`,
-      tag: a.effect,
-      action: () => tryInstall(a)
-    }))
-  ];
+  const choices = AUGMENTS.filter(a => !hasAug(a.id)).map(a => ({
+    label: `${a.name} — pay ${a.cost.emotion} · Clarity ≥ ${a.cost.clarity}`,
+    tag: a.effect,
+    action: () => tryInstall(a)
+  }));
   // Trust 3: the Ripperdoc will accept a SYNTHETIC memory at -1 clarity cost
   if (trust >= 3) {
     choices.push({
@@ -3012,18 +3180,7 @@ function openRipperdoc() {
       }
     });
   }
-  choices.push({ label: "Leave", action: enterSafehouse });
-  setScene({
-    portrait: "duchess_rend.jpg",
-    faction: "chromejaw",
-    title: "// RIPPERDOC // BACK ALLEY",
-    body: [
-      "Grease and neon. The doc doesn't look up from her surgical lathe.",
-      '"Pay in memory, not cred. You know how this works."',
-      trust >= 3 ? `<span class="hint" style="color:var(--neon-g);">She nods — you've earned a barter tier (trust ${trust}).</span>` : ''
-    ],
-    choices
-  });
+  renderVendor("ripperdoc", choices);
 }
 
 function tryInstall(aug) {
@@ -3046,20 +3203,16 @@ function tryInstall(aug) {
 }
 
 function openMnemonic() {
-  state.location = "mnemonic";
-  render();
   const trust = trustLevel("mnemonic");
   const sellList = state.memories.filter(m => !m.encrypted);
-  const choices = [
-    ...sellList.map(m => {
-      const bonus = m.source === "Stolen" ? " · +rep (illicit)" : m.source === "Synthetic" ? " · low value" : "";
-      return {
-        label: `Sell "${m.hook.slice(0, 38)}${m.hook.length > 38 ? "…" : ""}"${bonus}`,
-        tag: `${m.emotion}·${m.clarity}`,
-        action: () => sellMemory(m)
-      };
-    })
-  ];
+  const choices = sellList.map(m => {
+    const bonus = m.source === "Stolen" ? " · +rep (illicit)" : m.source === "Synthetic" ? " · low value" : "";
+    return {
+      label: `Sell "${m.hook.slice(0, 38)}${m.hook.length > 38 ? "…" : ""}"${bonus}`,
+      tag: `${m.emotion}·${m.clarity}`,
+      action: () => sellMemory(m)
+    };
+  });
   // Trust 3: Request a targeted extraction memory (pay 2 synthetic, get 1 fresh stolen)
   if (trust >= 3) {
     choices.push({
@@ -3116,18 +3269,7 @@ function openMnemonic() {
       }
     });
   }
-  choices.push({ label: "Leave", action: enterSafehouse });
-  setScene({
-    portrait: "mnemonic.jpg",
-    faction: "mnemonic",
-    title: "// MNEMONIC LAB // NEON-7",
-    body: [
-      "Glass walls. Patients floating in fluid, dreaming strangers' lives.",
-      "The buyer will purchase a memory — but a synthetic copy returns, half-Clarity.",
-      trust >= 3 ? `<span class="hint" style="color:var(--neon-g);">Your trust is known here (${trust}). Commissioned work is on offer.</span>` : ''
-    ],
-    choices
-  });
+  renderVendor("mnemonic", choices);
 }
 
 function sellMemory(m) {
@@ -3156,16 +3298,12 @@ function sellMemory(m) {
 }
 
 function openShadow() {
-  state.location = "shadow";
-  render();
   const trust = trustLevel("shadow");
-  const choices = [
-    ...state.memories.filter(m => !m.encrypted).map(m => ({
-      label: `Donate "${m.hook.slice(0, 40)}${m.hook.length > 40 ? "…" : ""}"`,
-      tag: `${m.emotion}·${m.clarity}${m.source === "Stolen" ? "·stolen" : ""}`,
-      action: () => donateMemory(m)
-    }))
-  ];
+  const choices = state.memories.filter(m => !m.encrypted).map(m => ({
+    label: `Donate "${m.hook.slice(0, 40)}${m.hook.length > 40 ? "…" : ""}"`,
+    tag: `${m.emotion}·${m.clarity}${m.source === "Stolen" ? "·stolen" : ""}`,
+    action: () => donateMemory(m)
+  }));
   // Trust 3: Encrypted storage — The Shadow will hide one memory off-book (auditor-proof)
   if (trust >= 3) {
     choices.push({
@@ -3211,18 +3349,7 @@ function openShadow() {
       }
     });
   }
-  choices.push({ label: "Leave", action: enterSafehouse });
-  setScene({
-    portrait: "archivist.jpg",
-    faction: "shadow",
-    title: "// THE SHADOW ARCHIVE",
-    body: [
-      "A candlelit backroom behind a noodle shop. An archivist in a hood logs every story into a tape deck older than you.",
-      "Donations earn no credit. Only a place in the record.",
-      trust >= 3 ? `<span class="hint" style="color:var(--neon-g);">The hood tips — you have storage privileges (trust ${trust}).</span>` : ''
-    ],
-    choices
-  });
+  renderVendor("shadow", choices);
 }
 
 function donateMemory(m) {
@@ -3236,8 +3363,6 @@ function donateMemory(m) {
 }
 
 function openGrey() {
-  state.location = "grey";
-  render();
   const trust = trustLevel("grey");
   if (trust >= 2 && !state.flags.latticeOffered) {
     state.flags.latticeOffered = true;
@@ -3314,25 +3439,10 @@ function openGrey() {
       }
     });
   }
-  choices.push({ label: "Leave", action: enterSafehouse });
-  setScene({
-    portrait: "lattice_ai.jpg",
-    faction: "grey",
-    voice: "tts_lattice.mp3",
-    title: "// THE GREY FREQUENCY",
-    body: [
-      "Lattice's voice comes through warm static. It sounds more human every week.",
-      `<span class="glitch">${tip}</span>`,
-      "\"I won't give you more today. I know what you'd do with it.\"",
-      trust >= 3 ? `<span class="hint" style="color:var(--neon-g);">Lattice knows you now (${trust}). Favors are available.</span>` : ''
-    ],
-    choices
-  });
+  renderVendor("grey", choices, { tip });
 }
 
 function openPurity() {
-  state.location = "purity";
-  render();
   const trust = trustLevel("purity");
   const hypocriteLine = state.flags.kaelSuspect
     ? 'Prophet Kael smiles. You notice the seam above his ear that wasn\'t there yesterday.'
@@ -3359,9 +3469,9 @@ function openPurity() {
       label: "Confession — burn a Stolen memory for –30 Compliance",
       tag: "TRUST 3",
       action: () => {
-        const idx = state.memories.findIndex(m => m.source === "Stolen");
-        if (idx < 0) { log("// You have no stolen memories to confess.", "warn"); return; }
-        state.memories.splice(idx, 1);
+        const stolen = state.memories.find(m => m.source === "Stolen");
+        if (!stolen) { log("// You have no stolen memories to confess.", "warn"); return; }
+        removeMemory(stolen.id);
         state.compliance = Math.max(0, state.compliance - 30);
         state.reputation.purity += 3;
         log("// You burned a stolen memory on the altar. Kael weeps. The heat drops.", "ok");
@@ -3416,19 +3526,7 @@ function openPurity() {
       enterSafehouse();
     }
   });
-  choices.push({ label: "Leave", action: enterSafehouse });
-  setScene({
-    portrait: "kael.jpg",
-    faction: "purity",
-    voice: "tts_kael.mp3",
-    title: "// PURITY TEMPLE // OLD CATHEDRAL",
-    body: [
-      "Candles. Unpainted wood. The smell of nobody's neural implants.",
-      hypocriteLine,
-      trust >= 5 ? '<span class="hint">The Sanctum door stands open.</span>' : ''
-    ].filter(Boolean),
-    choices
-  });
+  renderVendor("purity", choices, { hypocriteLine });
 }
 
 // ================================================================
@@ -4179,6 +4277,8 @@ function initTitle() {
 function openTitleSlotPicker(onPick) {
   const modal = document.createElement("div");
   modal.className = "modal-back";
+  modal.style.zIndex = 3500;
+  modal.dataset.titleFlow = "1";
   const slots = [0, 1, 2].map(i => {
     const meta = readSlotMeta(i);
     const label = meta.empty
@@ -4199,12 +4299,15 @@ function openTitleSlotPicker(onPick) {
     b.addEventListener("click", () => { const i = parseInt(b.dataset.slot, 10); modal.remove(); onPick(i); });
   });
   modal.querySelector("#slot-cancel").addEventListener("click", () => modal.remove());
-  $("#modal-root").appendChild(modal);
+  // Append to body, not #modal-root — modal-root lives inside #crt which is
+  // display:none while the title screen is showing.
+  document.body.appendChild(modal);
 }
 
 function openNewRunSlotPicker(onPick) {
   const modal = document.createElement("div");
   modal.className = "modal-back";
+  modal.style.zIndex = 3500;
   const slots = [0, 1, 2].map(i => {
     const meta = readSlotMeta(i);
     const label = meta.empty
@@ -4231,12 +4334,13 @@ function openNewRunSlotPicker(onPick) {
     });
   });
   modal.querySelector("#slot-cancel").addEventListener("click", () => modal.remove());
-  $("#modal-root").appendChild(modal);
+  document.body.appendChild(modal);
 }
 
 function openNGPlusPicker(ngp) {
   const modal = document.createElement("div");
   modal.className = "modal-back endgame";
+  modal.style.zIndex = 3500;
   const unlocked = new Set(ngp.endings || []);
   modal.innerHTML = `
     <div class="modal">
@@ -4268,7 +4372,7 @@ function openNGPlusPicker(ngp) {
       startNGPlus(mode);
     });
   });
-  $("#modal-root").appendChild(modal);
+  document.body.appendChild(modal);
 }
 
 // ================================================================
