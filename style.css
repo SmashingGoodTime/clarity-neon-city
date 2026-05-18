@@ -329,25 +329,27 @@ body {
   border-width: 2px;
   border-color: var(--neon-c);
   box-shadow:
-    0 0 28px rgba(0,255,65,0.30),
-    inset 0 0 18px rgba(0,255,65,0.08);
+    0 0 36px rgba(0,255,65,0.42),
+    inset 0 0 22px rgba(0,255,65,0.10);
 }
 #inventory .panel-title {
-  font-size: 15px;
+  font-size: 16px;
   letter-spacing: 5px;
   color: var(--neon-c);
-  text-shadow: 0 0 8px var(--neon-c);
+  text-shadow: 0 0 10px var(--neon-c);
   margin-bottom: 14px;
 }
 
 #memory-list {
   display: grid;
-  /* Bumped from 128 → 160 so the photos read clearly without dominating
-     the column. Still auto-fills to pack tightly on wider panels. */
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 14px 10px;
+  /* Smaller min so multiple polaroids tile per row on wide panels; the
+     max ceiling keeps a lone polaroid from blowing up to fill the column. */
+  grid-template-columns: repeat(auto-fill, minmax(150px, 200px));
+  justify-content: start;
+  gap: 16px 14px;
   padding: 6px 2px;
   align-items: start;
+  min-height: 360px;
 }
 
 .memory {
@@ -628,9 +630,118 @@ body {
 /* ---------- Side column ---------- */
 #side-column {
   display: grid;
-  grid-template-rows: minmax(0, 1.7fr) auto auto auto;
+  /* Memory stack owns the entire side column now — the other panels
+     (Standing / Case Board / Chrome) open as popup windows from the
+     button row below. */
+  grid-template-rows: 1fr auto;
   gap: 10px;
   min-height: 0;
+}
+
+/* Side-panel launcher buttons (replace the three small panels) */
+#side-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.side-btn {
+  background: var(--panel);
+  border: 1px solid var(--neon-c);
+  color: var(--neon-c);
+  padding: 10px 8px;
+  font: 11px "Courier New", monospace;
+  letter-spacing: 2px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  box-shadow: 0 0 12px rgba(0,255,156,0.15), inset 0 0 8px rgba(0,255,156,0.05);
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.side-btn:hover {
+  background: rgba(0,255,156,0.08);
+  box-shadow: 0 0 18px rgba(0,255,156,0.35), inset 0 0 10px rgba(0,255,156,0.10);
+  transform: translateY(-1px);
+}
+.side-btn:focus-visible {
+  outline: 2px solid var(--neon-y);
+  outline-offset: 2px;
+}
+.side-btn-label {
+  text-shadow: 0 0 6px var(--neon-c);
+}
+.side-btn-badge {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 6px;
+  text-align: center;
+  border: 1px solid var(--neon-c);
+  color: var(--neon-c);
+  background: rgba(0,0,0,0.4);
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.side-btn-badge.alert {
+  border-color: var(--audit);
+  color: var(--audit);
+  text-shadow: 0 0 4px var(--audit);
+}
+.side-btn-badge.empty { opacity: 0.45; }
+
+/* Popup window styling — visually distinct from generic modals */
+.modal.side-popup {
+  min-width: 480px;
+  max-width: 640px;
+  padding: 0;
+  border-color: var(--neon-c);
+  box-shadow: 0 0 40px var(--neon-c);
+}
+.modal.side-popup .side-popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--neon-c);
+  background: rgba(0,255,156,0.06);
+}
+.modal.side-popup .side-popup-head h2 {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 4px;
+  color: var(--neon-c);
+  text-shadow: 0 0 6px var(--neon-c);
+}
+.modal.side-popup .side-popup-close {
+  background: transparent;
+  border: 1px solid var(--neon-c);
+  color: var(--neon-c);
+  padding: 2px 8px;
+  font: 12px "Courier New", monospace;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.modal.side-popup .side-popup-close:hover {
+  background: rgba(0,255,156,0.12);
+}
+.modal.side-popup .side-popup-body {
+  padding: 14px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.modal.side-popup .side-popup-body .panel-title {
+  display: none;
+}
+.modal.side-popup .side-popup-body .panel {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  overflow: visible;
+}
+.modal.side-popup .side-popup-body .panel::before {
+  display: none;
 }
 .flash-memory { animation: memoryFlash 0.65s ease-out; }
 .flash-choice { animation: choiceFlash 0.65s ease-out; }
@@ -1190,7 +1301,7 @@ body.showing-title #toolbar { display: none !important; }
   #crt { position: static; min-height: 100vh; grid-template-rows: auto auto auto; }
   #hud { grid-template-columns: 1fr 1fr; }
   #stage { grid-template-columns: 1fr; }
-  #side-column { grid-template-rows: auto auto auto auto; }
+  #side-column { grid-template-rows: auto auto; }
   #inventory { max-height: none; }
   #memory-list { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .portrait { float: none; width: 100%; margin: 0 0 10px; }

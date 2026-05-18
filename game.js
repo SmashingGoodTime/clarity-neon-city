@@ -739,7 +739,92 @@ function render() {
   renderRep();
   renderAugs();
   renderCaseBoard();
+  renderSideBadges();
 }
+
+// ---- Side-panel popup launchers ----------------------------------------
+// Standing / Case Board / Chrome live in #side-hidden and surface as
+// popups when their launcher button is clicked. Their render targets
+// (#rep-list, #lead-list, #aug-list) keep ticking in the background so
+// counts stay accurate; only badges are visible at rest.
+
+const SIDE_PANEL_DEFS = {
+  rep:   { panelId: "rep-panel",  title: "// STANDING" },
+  leads: { panelId: "lead-panel", title: "// CASE BOARD" },
+  augs:  { panelId: "aug-panel",  title: "// INSTALLED CHROME" }
+};
+
+function renderSideBadges() {
+  const rep = document.getElementById("rep-badge");
+  if (rep) {
+    const worst = FACTIONS.reduce((acc, f) => {
+      const v = state.reputation[f.key] || 0;
+      return v < acc ? v : acc;
+    }, 0);
+    rep.textContent = worst < 0 ? String(worst) : "OK";
+    rep.classList.toggle("alert", worst <= -2);
+    rep.classList.toggle("empty", worst === 0);
+  }
+  const leadsB = document.getElementById("leads-badge");
+  if (leadsB) {
+    const leads = (typeof caseBoardLeads === "function") ? caseBoardLeads() : [];
+    const risky = leads.filter(l => l.tone === "risk").length;
+    leadsB.textContent = String(leads.length);
+    leadsB.classList.toggle("alert", risky > 0);
+    leadsB.classList.toggle("empty", leads.length === 0);
+  }
+  const augsB = document.getElementById("augs-badge");
+  if (augsB) {
+    const n = (state.augments || []).length;
+    augsB.textContent = String(n);
+    augsB.classList.toggle("empty", n === 0);
+  }
+}
+
+function openSidePanel(kind) {
+  const def = SIDE_PANEL_DEFS[kind];
+  if (!def) return;
+  // If already open, close (toggle behavior on repeat clicks).
+  const existing = document.querySelector(".modal-back[data-side-popup='" + kind + "']");
+  if (existing) { closeSidePanel(existing); return; }
+
+  const panel = document.getElementById(def.panelId);
+  if (!panel) return;
+
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.dataset.sidePopup = kind;
+  back.innerHTML = `
+    <div class="modal side-popup">
+      <div class="side-popup-head">
+        <h2>${def.title}</h2>
+        <button type="button" class="side-popup-close" aria-label="Close">CLOSE ✕</button>
+      </div>
+      <div class="side-popup-body"></div>
+    </div>`;
+  const body = back.querySelector(".side-popup-body");
+  // Move the live panel into the modal. On close we put it back so render
+  // targets keep their stable IDs.
+  back.dataset.returnTo = "side-hidden";
+  body.appendChild(panel);
+
+  back.addEventListener("click", (e) => { if (e.target === back) closeSidePanel(back); });
+  back.querySelector(".side-popup-close").addEventListener("click", () => closeSidePanel(back));
+  // Escape handler at the document level just removes the top modal; intercept
+  // so the live panel is returned to #side-hidden before the DOM detaches.
+  const origRemove = back.remove.bind(back);
+  back.remove = () => { closeSidePanel(back, origRemove); };
+  document.body.appendChild(back);
+  render();
+}
+
+function closeSidePanel(back, removeFn) {
+  const home = document.getElementById(back.dataset.returnTo || "side-hidden");
+  const panel = back.querySelector(".panel");
+  if (panel && home) home.appendChild(panel);
+  (removeFn || Element.prototype.remove.bind(back))();
+}
+
 
 function renderRep() {
   const el = $("#rep-list");
@@ -4849,6 +4934,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (confirm("Reset progress in the active save slot?")) resetGame();
   });
   $("#btn-help").addEventListener("click", openGlossary);
+  document.querySelectorAll("#side-controls .side-btn[data-side-panel]").forEach(btn => {
+    btn.addEventListener("click", () => openSidePanel(btn.dataset.sidePanel));
+  });
   const muteBtn = $("#hud-mute");
   if (muteBtn) {
     muteBtn.textContent = AudioLayer.muted ? "♪ UNMUTE" : "♪ MUTE";
