@@ -323,13 +323,29 @@ body {
 .report-row.bad .report-text { color: #ff7777; }
 
 /* ---------- Memory stack (polaroid cards, photo-album grid) ---------- */
+/* The memory stack is the game's central currency — give it more visual
+   weight than the other side panels so players read it first. */
+#inventory {
+  border-width: 2px;
+  border-color: var(--neon-c);
+  box-shadow:
+    0 0 28px rgba(0,255,65,0.30),
+    inset 0 0 18px rgba(0,255,65,0.08);
+}
+#inventory .panel-title {
+  font-size: 15px;
+  letter-spacing: 5px;
+  color: var(--neon-c);
+  text-shadow: 0 0 8px var(--neon-c);
+  margin-bottom: 14px;
+}
+
 #memory-list {
   display: grid;
-  /* auto-fill keeps tight cards that pack as many per row as the panel allows;
-     card min 128 keeps them small enough to read as a photo album, not a hero
-     carousel. */
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-  gap: 12px 8px;
+  /* Bumped from 128 → 160 so the photos read clearly without dominating
+     the column. Still auto-fills to pack tightly on wider panels. */
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px 10px;
   padding: 6px 2px;
   align-items: start;
 }
@@ -1176,7 +1192,7 @@ body.showing-title #toolbar { display: none !important; }
   #stage { grid-template-columns: 1fr; }
   #side-column { grid-template-rows: auto auto auto auto; }
   #inventory { max-height: none; }
-  #memory-list { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
+  #memory-list { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .portrait { float: none; width: 100%; margin: 0 0 10px; }
   .title-sub { font-size: 56px; letter-spacing: 14px; }
   #radio-body { width: 240px; }
