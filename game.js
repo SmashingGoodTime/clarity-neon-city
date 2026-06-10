@@ -602,6 +602,16 @@ const AUGMENTS = [
 
 function hasAug(id) { return state.augments.includes(id); }
 function augDef(id) { return AUGMENTS.find(a => a.id === id); }
+// Single path for chrome going in: charges, and the Purity Sanctum seal
+// only holds while you stay flesh — any install breaks it.
+function grantAugment(id) {
+  state.augments.push(id);
+  if (id === "spark") state.augCharges.spark = 1;
+  if (state.flags.puritySanctum) {
+    state.flags.puritySanctum = false;
+    log("// The Sanctum seal cracks as the chrome goes in. Purity's protection is gone.", "warn");
+  }
+}
 
 // ================================================================
 // ==== LOGGING ====
@@ -972,12 +982,12 @@ function caseBoardLeads() {
       tone: "unlock",
       text: "Inspect your starter memory. Its edges are too clean."
     });
-  } else if (!state.flags.endgameTriggered && state.runsCompleted >= 4) {
+  } else if (!state.flags.endgameTriggered && state.runsCompleted >= 3) {
     const bestRep = Math.max(...Object.values(rep).map(Math.abs));
     leads.push({
       kind: "ENDGAME",
       tone: "unlock",
-      text: `Any faction at +/-8 after 5 runs opens the three doors. Best signal: ${bestRep}.`
+      text: `Any faction at +/-8 after 5 runs opens the three doors. Runs ${Math.min(state.runsCompleted, 5)}/5 · strongest signal ${bestRep}/8.`
     });
   }
 
@@ -1565,7 +1575,7 @@ const CONTRACT_INTEL = {
     reward: "Multiple stolen high-clarity files",
     shifts: "Big Shadow gain, Omni crash",
     risks: "Major heat, vault burn is extreme",
-    helps: "Fear 5 enables clean bluff"
+    helps: "Fear 5 enables clean bluff; ICE-piercer pulls a fourth file"
   },
   droidboy_rankclimb: {
     reward: () => {
@@ -1582,6 +1592,7 @@ const CONTRACT_INTEL = {
     reward: "Awe 4 stolen datum",
     shifts: "Grey +3 if clean",
     risks: "Violence voids Lattice's contract",
+    helps: "ICE-piercer lifts the clerk's password too",
     unlocks: "Clean run opens Omni Sabotage"
   },
   purity_spy_ring: {
@@ -2176,6 +2187,12 @@ const ARCS = {
             const d = randomMemory({ emotion: "Awe", clarity: 3, source: "Stolen" });
             d.hook = "A lullaby no living parent remembers singing";
             [a, b, d].forEach(addMemory);
+            if (hasAug("ice")) {
+              const e = randomMemory({ emotion: "Grief", clarity: 4, source: "Stolen" });
+              e.hook = "A fourth file the index swears was never written";
+              addMemory(e);
+              log("\ ICE-PIERCER: a fourth file slips out with you.", "ok");
+            }
             state.reputation.shadow += 3;
             state.reputation.omni -= 5;
             complianceTick(c.compliance);
@@ -2290,7 +2307,7 @@ const ARCS = {
               state.flags.droidBoyRank = 2;
               log("// Rank raised. You are now DROID BOY 49%.", "ok");
               if (!hasAug("cloak")) {
-                state.augments.push("cloak");
+                grantAugment("cloak");
                 log("// Free CLOAK installed as Droid-Boy welcome gift.", "ok");
               }
               state.reputation.purity -= 2;
@@ -2452,6 +2469,12 @@ const ARCS = {
             const m = randomMemory({ emotion: "Awe", clarity: 4, source: "Stolen" });
             m.hook = "A column of names Omni claims no memory of";
             addMemory(m);
+            if (hasAug("ice")) {
+              const extra = randomMemory({ emotion: "Fear", clarity: 3, source: "Stolen" });
+              extra.hook = "The ledger clerk's password, whispered to no one";
+              addMemory(extra);
+              log("\ ICE-PIERCER: bonus memory extracted.", "ok");
+            }
             state.reputation.grey += 3;
             state.reputation.omni -= 2;
             complianceTick(c.compliance);
@@ -2905,17 +2928,24 @@ function runAuditIfDue() {
 // ================================================================
 function endDay() {
   let decayed = 0;
+  let dampened = 0;
   const nightMod = dailyContractModifier("board");
   state.memories.forEach(m => {
     if (m.encrypted) return;
     const resists = hasAug("empathy") && m.source === "Stolen";
-    const chance = (resists ? 0.15 : 0.35) + (nightMod.flag === "rainBlackout" ? 0.12 : 0);
-    if (Math.random() < chance) {
+    const nightBonus = nightMod.flag === "rainBlackout" ? 0.12 : 0;
+    const chance = (resists ? 0.15 : 0.35) + nightBonus;
+    const roll = Math.random();
+    if (roll < chance) {
       m.clarity = Math.max(1, m.clarity - 1);
       decayed += 1;
+    } else if (resists && roll < 0.35 + nightBonus) {
+      // Would have decayed without the Empathy Dampener
+      dampened += 1;
     }
   });
   if (decayed > 0) log(`// ${decayed} memor${decayed === 1 ? "y" : "ies"} decayed overnight.`, "warn");
+  if (dampened > 0) log(`// EMPATHY DAMPENER held ${dampened} stolen memor${dampened === 1 ? "y" : "ies"} together overnight.`, "ok");
   if (decayed > 0) recordConsequence("DECAY", `${decayed} memory${decayed === 1 ? "" : "ies"} decayed overnight.`, "warn");
 
   runAuditIfDue();
@@ -3238,8 +3268,7 @@ function openRipperdoc() {
         const aug = rand(remaining);
         removeMemory(synths[0].id);
         removeMemory(synths[1].id);
-        state.augments.push(aug.id);
-        if (aug.id === "spark") state.augCharges.spark = 1;
+        grantAugment(aug.id);
         state.reputation.purity = Math.max(-10, state.reputation.purity - 1);
         log(`// BARTER: ${aug.name} installed from 2 synthetic memories.`, "ok");
         bumpTrust("ripperdoc");
@@ -3287,8 +3316,7 @@ function tryInstall(aug) {
     return;
   }
   removeMemory(match.id);
-  state.augments.push(aug.id);
-  if (aug.id === "spark") state.augCharges.spark = 1;
+  grantAugment(aug.id);
   log(`// INSTALLED: ${aug.name}. You paid with "${match.hook}".`, "ok");
   const purityHit = dailyContractModifier("board").flag === "purityInformant" ? 2 : 1;
   state.reputation.purity = Math.max(-10, state.reputation.purity - purityHit);
@@ -3371,6 +3399,8 @@ function sellMemory(m) {
   removeMemory(m.id);
   // Source-aware reactions: Stolen gets a +rep kick (illicit is their business),
   // Synthetic yields a weaker synthetic (copying a copy), Yours is standard.
+  // Vivid originals (clarity 4+) fetch a premium — the reason to hold and
+  // encrypt a memory instead of flipping it the day you find it.
   let repGain = 1;
   let clarityFactor = 0.5;
   if (m.source === "Stolen") {
@@ -3379,6 +3409,8 @@ function sellMemory(m) {
     state.reputation.shadow = Math.max(-10, state.reputation.shadow - 1);
   }
   if (m.source === "Synthetic") { repGain = 0; clarityFactor = 0.34; }
+  const premium = m.source !== "Synthetic" && m.clarity >= 4;
+  if (premium) repGain += 1;
   state.reputation.mnemonic = Math.min(10, state.reputation.mnemonic + repGain);
   const synth = makeMemory({
     hook: `[COPY] ${m.hook}`,
@@ -3389,6 +3421,7 @@ function sellMemory(m) {
   addMemory(synth);
   bumpTrust("mnemonic");
   log(`// Sold "${m.hook}". ${m.source === "Stolen" ? "Mnemonic paid extra for stolen goods." : "Received synthetic echo."}`, "lore");
+  if (premium) log(`// Clarity ${m.clarity} original. Mnemonic paid a vividness premium.`, "ok");
   openMnemonic();
 }
 
@@ -3449,11 +3482,14 @@ function openShadow() {
 
 function donateMemory(m) {
   const isStolen = m.source === "Stolen";
+  // High-clarity donations are worth more to the archive — they scrub more heat.
+  const vivid = m.clarity >= 4;
   removeMemory(m.id);
   state.reputation.shadow = Math.min(10, state.reputation.shadow + (isStolen ? 3 : 2));
-  state.compliance = Math.max(0, state.compliance - (isStolen ? 12 : 8));
+  state.compliance = Math.max(0, state.compliance - (isStolen ? 12 : 8) - (vivid ? 5 : 0));
   bumpTrust("shadow");
   log(`// Donated "${m.hook}" to the archive.${isStolen ? " Stolen memories are gold to them." : " Compliance heat drops slightly."}`, "lore");
+  if (vivid) log("// The archivists weep at the detail. Extra heat scrubbed.", "ok");
   openShadow();
 }
 
@@ -4863,6 +4899,11 @@ function playIntroVideo(onDone, onFail) {
     return;
   }
 
+  // Re-entry guard — a second invocation would stack document listeners
+  // and double the narration audio.
+  if (screen.dataset.playing === "1") return;
+  screen.dataset.playing = "1";
+
   let activeIdx = 0;
   let musicAudio = null;
   let voiceAudio = null;
@@ -4870,12 +4911,15 @@ function playIntroVideo(onDone, onFail) {
   let transitionTimeout = null;
   let isTypewriterRunning = false;
   let isAudioEnded = false;
+  let clickCtx = null; // one shared synth context — browsers cap AudioContext count
 
   const cleanup = () => {
     if (musicAudio) { musicAudio.pause(); musicAudio = null; }
     if (voiceAudio) { voiceAudio.pause(); voiceAudio = null; }
     if (typewriterTimer) { clearInterval(typewriterTimer); typewriterTimer = null; }
     if (transitionTimeout) { clearTimeout(transitionTimeout); transitionTimeout = null; }
+    if (clickCtx) { try { clickCtx.close(); } catch (_) {} clickCtx = null; }
+    screen.dataset.playing = "0";
     screen.style.display = "none";
     document.removeEventListener("keydown", handleKeys);
     screen.removeEventListener("click", handleAdvance);
@@ -4897,18 +4941,18 @@ function playIntroVideo(onDone, onFail) {
   // Typewriter audio click synth (Web Audio API oscillator click)
   const playSFXClick = () => {
     try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
+      if (!clickCtx) clickCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = clickCtx.createOscillator();
+      const gain = clickCtx.createGain();
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(110 + Math.random() * 50, audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.04);
-      gain.gain.setValueAtTime(0.006, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.04);
+      osc.frequency.setValueAtTime(110 + Math.random() * 50, clickCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(10, clickCtx.currentTime + 0.04);
+      gain.gain.setValueAtTime(0.006, clickCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, clickCtx.currentTime + 0.04);
       osc.connect(gain);
-      gain.connect(audioCtx.destination);
+      gain.connect(clickCtx.destination);
       osc.start();
-      osc.stop(audioCtx.currentTime + 0.04);
+      osc.stop(clickCtx.currentTime + 0.04);
     } catch (_) {}
   };
 
@@ -5021,10 +5065,9 @@ function playIntroVideo(onDone, onFail) {
     };
 
     voiceAudio.addEventListener("loadedmetadata", () => {
-      if (isTypewriterRunning) {
-        clearInterval(typewriterTimer);
-        startTypewriter(voiceAudio.duration);
-      }
+      // Only start here if the play() path hasn't already — restarting a
+      // running typewriter trips the started-guard and freezes the text.
+      if (!typewriterStarted) startTypewriter(voiceAudio.duration);
     });
 
     voiceAudio.addEventListener("ended", () => {
