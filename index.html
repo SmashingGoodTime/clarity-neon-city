@@ -9,10 +9,21 @@
 
 <!-- First-run intro cinematic (hidden by default; shown via JS on NEW RUN if unseen) -->
 <div id="intro-video-screen" style="display:none;">
-  <video id="intro-video" preload="auto" playsinline>
-    <source src="assets/video/clarity_intro.mp4" type="video/mp4">
-  </video>
-  <button id="intro-skip" type="button">SKIP &gt;&gt;</button>
+  <!-- Cinematic slide images container -->
+  <div id="intro-slides-container"></div>
+
+  <!-- Ambient visual overlays -->
+  <div class="intro-vignette"></div>
+  <div class="intro-scanlines"></div>
+
+  <!-- Dialogue/narrative subtitles -->
+  <div class="intro-text-box">
+    <div id="intro-text-content"></div>
+  </div>
+
+  <!-- Controls -->
+  <button id="intro-skip" type="button" class="cinematic-control">SKIP INTRO &gt;&gt;</button>
+  <button id="intro-mute" type="button" class="cinematic-control">♪ MUTE</button>
 </div>
 
 <!-- Title / splash screen -->
@@ -155,6 +166,6 @@
   <div id="modal-root"></div>
 </div>
 
-<script src="game.js?v=34"></script>
+<script src="game.js?v=35"></script>
 </body>
 </html>

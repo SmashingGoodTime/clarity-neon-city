@@ -67,6 +67,16 @@ const NGPLUS_KEY = "clarity.ngplus";
 const INTRO_SEEN_KEY = "clarity.introSeen";
 const MUTE_KEY = "clarity.muted";             // persist across sessions
 
+function storageGet(key) {
+  try { return localStorage.getItem(key); } catch (_) { return null; }
+}
+function storageSet(key, value) {
+  try { localStorage.setItem(key, value); return true; } catch (_) { return false; }
+}
+function storageRemove(key) {
+  try { localStorage.removeItem(key); return true; } catch (_) { return false; }
+}
+
 // ================================================================
 // ==== AUDIO LAYER ====
 // Global mute state (persisted) applied to BGM, ambient, SFX,
@@ -77,12 +87,12 @@ const MUTE_KEY = "clarity.muted";             // persist across sessions
 // that it works uniformly for dynamically-created SFX instances too.
 const AudioLayer = {
   muted: (() => {
-    try { return localStorage.getItem(MUTE_KEY) === "1"; } catch (_) { return false; }
+    return storageGet(MUTE_KEY) === "1";
   })(),
   sfxInstances: new Set(),
   setMuted(m) {
     this.muted = !!m;
-    try { localStorage.setItem(MUTE_KEY, this.muted ? "1" : "0"); } catch (_) {}
+    storageSet(MUTE_KEY, this.muted ? "1" : "0");
     if (_bgmEl) _bgmEl.volume = this.muted ? 0 : (parseFloat(_bgmEl.dataset.baseVolume) || 0.45);
     if (_ambientEl) _ambientEl.volume = this.muted ? 0 : (parseFloat(_ambientEl.dataset.baseVolume) || 0.22);
     const ra = document.getElementById("radio-audio");
@@ -93,7 +103,7 @@ const AudioLayer = {
     this.sfxInstances.forEach(el => { try { el.volume = this.muted ? 0 : (parseFloat(el.dataset.baseVolume) || 0.5); } catch (_) {} });
     // Reflect in any UI mute buttons
     const lbl = this.muted ? "♪ UNMUTE" : "♪ MUTE";
-    document.querySelectorAll("#title-mute, #hud-mute").forEach(b => { if (b) b.textContent = lbl; });
+    document.querySelectorAll("#title-mute, #hud-mute, #intro-mute").forEach(b => { if (b) b.textContent = lbl; });
   },
   toggle() { this.setMuted(!this.muted); }
 };
@@ -3792,18 +3802,16 @@ function showEnding(id) {
 // the first time it's seen. Active slot is tracked in localStorage so autosave
 // writes to the correct slot after load.
 function activeSlotIndex() {
-  try {
-    const raw = localStorage.getItem(ACTIVE_SLOT_KEY);
-    const n = raw == null ? 0 : parseInt(raw, 10);
-    return isNaN(n) ? 0 : Math.max(0, Math.min(2, n));
-  } catch (_) { return 0; }
+  const raw = storageGet(ACTIVE_SLOT_KEY);
+  const n = raw == null ? 0 : parseInt(raw, 10);
+  return isNaN(n) ? 0 : Math.max(0, Math.min(2, n));
 }
 function setActiveSlot(i) {
-  try { localStorage.setItem(ACTIVE_SLOT_KEY, String(Math.max(0, Math.min(2, i)))); } catch (_) {}
+  storageSet(ACTIVE_SLOT_KEY, String(Math.max(0, Math.min(2, i))));
 }
 function slotKey(i) { return SAVE_SLOT_KEYS[Math.max(0, Math.min(2, i))]; }
 function readSlotRaw(i) {
-  try { return localStorage.getItem(slotKey(i)); } catch (_) { return null; }
+  return storageGet(slotKey(i));
 }
 function readSlotMeta(i) {
   // Returns { empty, day, name, ending, version, ts }
@@ -3812,7 +3820,7 @@ function readSlotMeta(i) {
     // Legacy fallback for slot 0 only — pick up the old save key if present
     if (i === 0) {
       try {
-        const legacy = localStorage.getItem(SAVE_KEY);
+        const legacy = storageGet(SAVE_KEY);
         if (legacy) {
           const s = JSON.parse(legacy);
           return { empty: false, day: s.day || 1, name: s.operative?.name || "—", ending: s.flags?.endingAchieved || null, legacy: true };
@@ -3827,12 +3835,12 @@ function readSlotMeta(i) {
   } catch (_) { return { empty: true, corrupt: true }; }
 }
 function writeSlot(i, payload) {
-  try { localStorage.setItem(slotKey(i), JSON.stringify(payload)); return true; } catch (e) { return false; }
+  return storageSet(slotKey(i), JSON.stringify(payload));
 }
 
 function autosave() {
   const i = activeSlotIndex();
-  try { localStorage.setItem(slotKey(i), JSON.stringify(state)); } catch (_) {}
+  storageSet(slotKey(i), JSON.stringify(state));
 }
 function saveGame() {
   const i = activeSlotIndex();
@@ -3842,16 +3850,16 @@ function saveGame() {
 function loadGame() {
   const i = activeSlotIndex();
   let raw = readSlotRaw(i);
-  if (!raw && i === 0) raw = localStorage.getItem(SAVE_KEY); // legacy
+  if (!raw && i === 0) raw = storageGet(SAVE_KEY); // legacy
   if (!raw) { log("// No save found in this slot.", "warn"); return; }
   try {
     const loaded = JSON.parse(raw);
     state = migrateSave(loaded);
     // Migrate legacy key into slot 1
     try {
-      const legacy = localStorage.getItem(SAVE_KEY);
+      const legacy = storageGet(SAVE_KEY);
       if (legacy && !readSlotRaw(0)) writeSlot(0, JSON.parse(legacy));
-      if (legacy) localStorage.removeItem(SAVE_KEY);
+      if (legacy) storageRemove(SAVE_KEY);
     } catch (_) {}
     document.querySelector(".ending-screen")?.remove();
     log("// SAVE loaded.", "ok");
@@ -3928,7 +3936,7 @@ function openExportImportModal() {
       const imported = parsed.state || parsed;
       state = migrateSave(imported);
       writeSlot(activeSlotIndex(), state);
-      if (parsed.ngplus) localStorage.setItem(NGPLUS_KEY, JSON.stringify(parsed.ngplus));
+      if (parsed.ngplus) storageSet(NGPLUS_KEY, JSON.stringify(parsed.ngplus));
       modal.remove();
       log("// Imported save into active slot.", "ok");
       enterSafehouse();
@@ -3978,7 +3986,8 @@ function openRunHistoryModal() {
 function resetGame() {
   // Preserve NG+ ledger across reset (it's the whole point of unlocks)
   const i = activeSlotIndex();
-  try { localStorage.removeItem(slotKey(i)); localStorage.removeItem(SAVE_KEY); } catch (_) {}
+  storageRemove(slotKey(i));
+  storageRemove(SAVE_KEY);
   state = freshState();
   document.querySelector(".ending-screen")?.remove();
   const ts = document.getElementById("title-screen");
@@ -4021,20 +4030,20 @@ function saveNGPlus(endingId) {
         hook: m.hook, emotion: m.emotion, clarity: m.clarity, source: m.source, day: m.day, tags: m.tags || []
       }))
     };
-    localStorage.setItem(NGPLUS_KEY, JSON.stringify(payload));
+    storageSet(NGPLUS_KEY, JSON.stringify(payload));
   } catch (_) {}
 }
 
 function readNGPlus() {
   try {
-    const raw = localStorage.getItem(NGPLUS_KEY);
+    const raw = storageGet(NGPLUS_KEY);
     if (!raw) return {};
     return JSON.parse(raw);
   } catch (_) { return {}; }
 }
 
 function startNGPlus(mode) {
-  try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
+  storageRemove(SAVE_KEY);
   state = freshState();
   state.flags.ngMode = mode;
   document.querySelector(".ending-screen")?.remove();
@@ -4286,7 +4295,7 @@ function initTitle() {
     window.addEventListener("keydown", kick, true);
   });
 
-  const anySlot = [0, 1, 2].some(i => !readSlotMeta(i).empty) || !!localStorage.getItem(SAVE_KEY);
+  const anySlot = [0, 1, 2].some(i => !readSlotMeta(i).empty) || !!storageGet(SAVE_KEY);
   $("#title-continue").disabled = !anySlot;
   if (!anySlot) {
     $("#title-continue").style.opacity = 0.35;
@@ -4413,7 +4422,7 @@ function openNewRunSlotPicker(onPick) {
     b.addEventListener("click", () => {
       const i = parseInt(b.dataset.slot, 10);
       modal.remove();
-      try { localStorage.removeItem(slotKey(i)); } catch (_) {}
+      storageRemove(slotKey(i));
       setActiveSlot(i);
       onPick();
     });
@@ -4779,10 +4788,10 @@ function boot() {
   initRadio();
   // First-run — show the cinematic intro. If the video is missing or the
   // browser blocks playback, fall back to the text orientation card.
-  if (!localStorage.getItem(INTRO_SEEN_KEY)) {
+  if (!storageGet(INTRO_SEEN_KEY)) {
     playIntroVideo(
       () => {
-        try { localStorage.setItem(INTRO_SEEN_KEY, "1"); } catch (_) {}
+        storageSet(INTRO_SEEN_KEY, "1");
         enterSafehouse();
       },
       () => {
@@ -4795,44 +4804,278 @@ function boot() {
   enterSafehouse();
 }
 
-// ---- Intro cinematic player ----
+// ---- Intro cinematic timeline & player ----
+const INTRO_TIMELINE = [
+  {
+    image: "assets/images/intro_rainy_city.jpg",
+    audio: "intro_1_rain.mp3",
+    text: "The rain hasn't stopped in seven years.",
+    fx: "kb-zoom-in"
+  },
+  {
+    image: "assets/images/intro_omni_project.jpg",
+    audio: "intro_2_omni.mp3",
+    text: "Omni-Corp owns the sky. Their neural implants promised to end cyber-psychosis. They lied. The implants are a backdoor. A plan to merge every mind in Neon City into a single, manageable consciousness. They call it... The Project.",
+    fx: "kb-zoom-out"
+  },
+  {
+    image: "assets/images/intro_factions_conflict.jpg",
+    audio: "intro_3_factions.mp3",
+    text: "The streets fight back. The Shadow archives what Compliance erases. The Mnemonic Collective traffics in stolen memories. Purity rejects the chrome. The Chrome-Jaws sell it by the pound.",
+    fx: "kb-pan-left"
+  },
+  {
+    image: "assets/images/lattice_ai.jpg",
+    audio: "intro_4_lattice.mp3",
+    text: "Lattice, the AI who brokers everything between them, has started refusing deals that end in deaths.",
+    fx: "kb-pan-right"
+  },
+  {
+    image: "assets/images/intro_safehouse.jpg",
+    audio: "intro_5_wake.mp3",
+    text: "You wake in a safehouse in Gutter-9. Your deck is humming. You have one memory left that feels like it's yours.",
+    fx: "kb-zoom-in"
+  },
+  {
+    image: "assets/images/intro_deck_pov.jpg",
+    audio: "intro_6_stakes.mp3",
+    text: "This week you will decide which of them gets the rest.",
+    fx: "kb-zoom-out"
+  },
+  {
+    image: "assets/images/intro_welcome_city.jpg",
+    audio: "intro_7_welcome.mp3",
+    text: "Welcome to Neon City.",
+    fx: "kb-pan-left"
+  }
+];
+
 function playIntroVideo(onDone, onFail) {
   const screen = document.getElementById("intro-video-screen");
-  const video = document.getElementById("intro-video");
+  const slidesContainer = document.getElementById("intro-slides-container");
+  const textBox = document.querySelector(".intro-text-box");
+  const textContent = document.getElementById("intro-text-content");
   const skipBtn = document.getElementById("intro-skip");
-  if (!screen || !video || !skipBtn) {
+  const muteBtn = document.getElementById("intro-mute");
+
+  if (!screen || !slidesContainer || !textBox || !textContent || !skipBtn || !muteBtn) {
     if (onFail) onFail(); else onDone();
     return;
   }
 
-  let finished = false;
-  const cleanup = () => {
-    finished = true;
-    try { video.pause(); video.currentTime = 0; } catch (_) {}
-    screen.style.display = "none";
-    skipBtn.removeEventListener("click", finish);
-    document.removeEventListener("keydown", onKey);
-    video.removeEventListener("ended", finish);
-    video.removeEventListener("error", fail);
-  };
-  const finish = () => { if (finished) return; cleanup(); onDone(); };
-  const fail = () => { if (finished) return; cleanup(); (onFail || onDone)(); };
-  const onKey = (e) => { if (e.key === "Escape" || e.key === " ") finish(); };
+  let activeIdx = 0;
+  let musicAudio = null;
+  let voiceAudio = null;
+  let typewriterTimer = null;
+  let transitionTimeout = null;
+  let isTypewriterRunning = false;
+  let isAudioEnded = false;
 
-  // Duck any other audio to near-silence during the intro
+  const cleanup = () => {
+    if (musicAudio) { musicAudio.pause(); musicAudio = null; }
+    if (voiceAudio) { voiceAudio.pause(); voiceAudio = null; }
+    if (typewriterTimer) { clearInterval(typewriterTimer); typewriterTimer = null; }
+    if (transitionTimeout) { clearTimeout(transitionTimeout); transitionTimeout = null; }
+    screen.style.display = "none";
+    document.removeEventListener("keydown", handleKeys);
+    screen.removeEventListener("click", handleAdvance);
+    skipBtn.removeEventListener("click", skipAll);
+    muteBtn.removeEventListener("click", toggleMute);
+  };
+
+  const finish = () => { cleanup(); onDone(); };
+  const fail = () => { cleanup(); (onFail || onDone)(); };
+  const skipAll = (e) => { if (e) e.stopPropagation(); finish(); };
+
+  const toggleMute = (e) => {
+    if (e) e.stopPropagation();
+    AudioLayer.toggle();
+    if (musicAudio) musicAudio.volume = AudioLayer.muted ? 0 : 0.35;
+    if (voiceAudio) voiceAudio.volume = AudioLayer.muted ? 0 : 0.9;
+  };
+
+  // Typewriter audio click synth (Web Audio API oscillator click)
+  const playSFXClick = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(110 + Math.random() * 50, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.04);
+      gain.gain.setValueAtTime(0.006, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.04);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.04);
+    } catch (_) {}
+  };
+
+  const checkSlideCompletion = () => {
+    if (!isTypewriterRunning && isAudioEnded) {
+      transitionTimeout = setTimeout(() => {
+        playSlide(activeIdx + 1);
+      }, 1500);
+    }
+  };
+
+  const handleAdvance = (e) => {
+    if (e) e.stopPropagation();
+    const item = INTRO_TIMELINE[activeIdx];
+    if (isTypewriterRunning) {
+      clearInterval(typewriterTimer);
+      isTypewriterRunning = false;
+      textContent.textContent = item.text;
+      checkSlideCompletion();
+    } else if (isAudioEnded) {
+      if (transitionTimeout) clearTimeout(transitionTimeout);
+      playSlide(activeIdx + 1);
+    } else {
+      if (voiceAudio) {
+        voiceAudio.pause();
+        isAudioEnded = true;
+      }
+      checkSlideCompletion();
+    }
+  };
+
+  const handleKeys = (e) => {
+    if (e.key === "Escape") {
+      skipAll();
+    } else if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      handleAdvance();
+    } else if (e.key === "m" || e.key === "M") {
+      e.preventDefault();
+      toggleMute();
+    }
+  };
+
+  // Build slides in container
+  slidesContainer.innerHTML = INTRO_TIMELINE.map((item, idx) => `
+    <div class="cinematic-slide ${item.fx}" id="intro-slide-${idx}">
+      <img src="${item.image}" alt="">
+    </div>
+  `).join("");
+
+  // Play a specific slide index
+  const playSlide = (idx) => {
+    if (idx >= INTRO_TIMELINE.length) {
+      finish();
+      return;
+    }
+    activeIdx = idx;
+    const item = INTRO_TIMELINE[idx];
+
+    // Transition crossfade
+    slidesContainer.querySelectorAll(".cinematic-slide").forEach(el => el.classList.remove("active"));
+    screen.classList.add("cinematic-glitch");
+    setTimeout(() => screen.classList.remove("cinematic-glitch"), 250);
+
+    const currentSlide = document.getElementById(`intro-slide-${idx}`);
+    if (currentSlide) currentSlide.classList.add("active");
+
+    // Clean current state
+    if (typewriterTimer) clearInterval(typewriterTimer);
+    if (transitionTimeout) clearTimeout(transitionTimeout);
+    if (voiceAudio) { voiceAudio.pause(); voiceAudio = null; }
+
+    isAudioEnded = false;
+    textContent.textContent = "";
+    isTypewriterRunning = true;
+
+    // Load voice narration audio
+    voiceAudio = new Audio(`assets/audio/${item.audio}`);
+    voiceAudio.volume = AudioLayer.muted ? 0 : 0.9;
+
+    let speed = 40; // Default fallback speed
+    let typewriterStarted = false;
+
+    const startTypewriter = (duration) => {
+      if (typewriterStarted) return;
+      typewriterStarted = true;
+      const letters = item.text.split("");
+      let i = 0;
+
+      if (duration && duration > 0) {
+        // Budget time: leave a 0.8s gap at the end
+        const targetTime = Math.max(1000, (duration * 1000) - 800);
+        speed = targetTime / letters.length;
+        speed = Math.max(15, Math.min(65, speed));
+      }
+
+      typewriterTimer = setInterval(() => {
+        if (i < letters.length) {
+          textContent.textContent += letters[i];
+          i++;
+          if (i % 3 === 0 && !AudioLayer.muted) {
+            playSFXClick();
+          }
+        } else {
+          clearInterval(typewriterTimer);
+          isTypewriterRunning = false;
+          checkSlideCompletion();
+        }
+      }, speed);
+    };
+
+    voiceAudio.addEventListener("loadedmetadata", () => {
+      if (isTypewriterRunning) {
+        clearInterval(typewriterTimer);
+        startTypewriter(voiceAudio.duration);
+      }
+    });
+
+    voiceAudio.addEventListener("ended", () => {
+      isAudioEnded = true;
+      checkSlideCompletion();
+    });
+
+    voiceAudio.addEventListener("error", () => {
+      isAudioEnded = true;
+      if (isTypewriterRunning) {
+        clearInterval(typewriterTimer);
+        isTypewriterRunning = false;
+        textContent.textContent = item.text;
+      }
+      checkSlideCompletion();
+    });
+
+    voiceAudio.play().then(() => {
+      startTypewriter(voiceAudio.duration || 0);
+    }).catch(err => {
+      console.warn("Narration block or fail: ", err);
+      isAudioEnded = true;
+      startTypewriter(0);
+    });
+  };
+
+  // Bind controls
+  screen.style.display = "flex";
+  skipBtn.addEventListener("click", skipAll);
+  muteBtn.addEventListener("click", toggleMute);
+  screen.addEventListener("click", handleAdvance);
+  document.addEventListener("keydown", handleKeys);
+
+  // Reflect initial mute state
+  const lbl = AudioLayer.muted ? "♪ UNMUTE" : "♪ MUTE";
+  muteBtn.textContent = lbl;
+
+  // Start background score loop
+  musicAudio = new Audio("assets/audio/intro_score.mp3");
+  musicAudio.loop = true;
+  musicAudio.volume = AudioLayer.muted ? 0 : 0.35;
+  
+  // Pause any BGM
   _bgmEl.pause();
 
-  screen.style.display = "flex";
-  video.currentTime = 0;
-  skipBtn.addEventListener("click", finish);
-  video.addEventListener("ended", finish);
-  video.addEventListener("error", fail);
-  document.addEventListener("keydown", onKey);
-
-  // Play — NEW RUN click is the user gesture that unlocks autoplay + audio
-  video.play().catch((err) => {
-    log("// Intro video play blocked: " + err.message, "warn");
-    fail();
+  musicAudio.play().then(() => {
+    playSlide(0);
+  }).catch(err => {
+    // If music fails (due to lack of user gesture), play slide anyway, gesture will unlock audio on first click
+    console.warn("Background music play failed: ", err);
+    playSlide(0);
   });
 }
 
@@ -4856,7 +5099,7 @@ function showOrientation() {
       label: "Open my eyes.",
       tag: "BEGIN",
       action: () => {
-        try { localStorage.setItem(INTRO_SEEN_KEY, "1"); } catch (_) {}
+        storageSet(INTRO_SEEN_KEY, "1");
         enterSafehouse();
       }
     }]
