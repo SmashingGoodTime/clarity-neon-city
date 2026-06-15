@@ -168,9 +168,13 @@ function playSFX(file, vol = 0.55) {
 // Katakana matrix rain — title screen only. Stops when game starts.
 // ================================================================
 let _matrixRaf = null;
+let _matrixResizeHandler = null;
 function initMatrixRain() {
   const canvas = document.getElementById("matrix-rain");
   if (!canvas) return;
+  // Honor reduced-motion: the CSS already hides the canvas, so skip the rAF
+  // loop entirely rather than animate an invisible target forever.
+  if (_prefersReducedMotion()) return;
   const ctx = canvas.getContext("2d");
   const CHARS = "アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズヅブプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン0123456789ABCDEF*+-=/%$#@!<>[]{}";
   let cols, drops, fontSize;
@@ -183,6 +187,7 @@ function initMatrixRain() {
     drops = new Array(cols).fill(0).map(() => Math.random() * -50);
   }
   resize();
+  _matrixResizeHandler = resize;
   window.addEventListener("resize", resize);
 
   let last = 0;
@@ -214,6 +219,7 @@ function initMatrixRain() {
 
 function stopMatrixRain() {
   if (_matrixRaf) { cancelAnimationFrame(_matrixRaf); _matrixRaf = null; }
+  if (_matrixResizeHandler) { window.removeEventListener("resize", _matrixResizeHandler); _matrixResizeHandler = null; }
 }
 
 // ================================================================
@@ -250,16 +256,18 @@ function typewriterReveal(nodes, speed = 14) {
   // Reduced-motion users see all text immediately.
   if (_prefersReducedMotion()) return () => {};
   let cancelled = false;
-  const done = () => {};
+  let timer = null;
 
   const texts = nodes.map(n => ({ el: n, html: n.innerHTML }));
   texts.forEach(t => { t.el.innerHTML = ""; });
 
   const skip = () => {
     cancelled = true;
+    if (timer) { clearTimeout(timer); timer = null; }
     texts.forEach(t => { t.el.innerHTML = t.html; });
     document.removeEventListener("click", skip, true);
     document.removeEventListener("keydown", skip, true);
+    if (_typewriterCancel === skip) _typewriterCancel = null;
   };
   document.addEventListener("click", skip, true);
   document.addEventListener("keydown", skip, true);
@@ -283,13 +291,14 @@ function typewriterReveal(nodes, speed = 14) {
         } else {
           html += src[i++];
           t.el.innerHTML = html;
-          await new Promise(r => setTimeout(r, speed));
+          await new Promise(r => { timer = setTimeout(r, speed); });
         }
       }
       if (!cancelled) t.el.innerHTML = src;
     }
     document.removeEventListener("click", skip, true);
     document.removeEventListener("keydown", skip, true);
+    if (_typewriterCancel === skip) _typewriterCancel = null;
   })();
   return skip;
 }
@@ -691,9 +700,25 @@ function renderHud() {
   const capPct = (state.memories.length / state.capacity) * 100;
   $("#capacity-bar .fill").style.width = capPct + "%";
   $("#capacity-readout").textContent = `${state.memories.length} / ${state.capacity}`;
+  // Keep the progressbar ARIA values current so screen readers announce the
+  // live numbers rather than the markup's initial state.
+  const capBarEl = $("#capacity-bar");
+  if (capBarEl) {
+    capBarEl.setAttribute("aria-valuemin", "0");
+    capBarEl.setAttribute("aria-valuemax", String(state.capacity));
+    capBarEl.setAttribute("aria-valuenow", String(state.memories.length));
+    capBarEl.setAttribute("aria-valuetext", `${state.memories.length} of ${state.capacity} memories held`);
+  }
 
   $("#compliance-bar .fill").style.width = state.compliance + "%";
   $("#compliance-readout").textContent = `${state.compliance} %`;
+  const compBarEl = $("#compliance-bar");
+  if (compBarEl) {
+    compBarEl.setAttribute("aria-valuemin", "0");
+    compBarEl.setAttribute("aria-valuemax", "100");
+    compBarEl.setAttribute("aria-valuenow", String(state.compliance));
+    compBarEl.setAttribute("aria-valuetext", `${state.compliance} percent compliance heat`);
+  }
   // HUD audit tier indicator
   const tierEl = document.getElementById("audit-tier-readout");
   if (tierEl) {
@@ -710,19 +735,38 @@ function renderHud() {
   if (capBar) capBar.classList.toggle("danger", (state.memories.length / state.capacity) >= 0.9);
 }
 
+let _stackSig = null;
 function renderStack() {
   const ml = $("#memory-list");
+  // renderStack runs on every render(), but the stack is unchanged for most
+  // state ticks (heat, rep, day). Skip the full teardown + image rebuild unless
+  // something a card actually shows changed. The signature covers every rendered
+  // field so a real change always forces a repaint.
+  const sig = state.memories.map(m =>
+    `${m.id}|${m.clarity}|${m.encrypted ? 1 : 0}|${m.synthetic ? 1 : 0}|${m.backdoor ? 1 : 0}|${m.source}|${m.emotion}|${m.hook}|${m.image || ""}|${(m.tags || []).join(",")}`
+  ).join("§");
+  if (sig === _stackSig && ml.children.length) return;
+  _stackSig = sig;
+
   ml.innerHTML = "";
   if (state.memories.length === 0) {
     ml.innerHTML = `<div class="hint" style="color:var(--dim);font-size:12px;">Stack empty. Run a contract.</div>`;
+    return;
   }
   state.memories.forEach(m => {
     const el = document.createElement("div");
     el.className = `memory ${m.encrypted ? "encrypted" : ""} ${m.synthetic ? "synthetic" : ""}`;
     const imgSrc = m.image || hookImage(m.hook, m.emotion);
     el.setAttribute("data-tip", `Tags: ${escapeHtml(memoryTagText(m))}`);
+    // Keyboard + screen-reader access: the memory stack is the core mechanic,
+    // so each card is a real focusable control, not a click-only div.
+    el.tabIndex = 0;
+    el.setAttribute("role", "button");
+    el.setAttribute("aria-label",
+      `Memory: ${m.hook}. ${m.emotion}, clarity ${m.clarity} of 5, ${m.source}` +
+      `${m.encrypted ? ", encrypted" : ""}${m.backdoor ? ", Omni tracking ping" : ""}. Activate for actions.`);
     el.innerHTML = `
-      <img class="polaroid-img" src="${imgSrc}" alt="" onerror="this.onerror=null;this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';this.dataset.missing='1';">
+      <img class="polaroid-img" src="${imgSrc}" alt="" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';this.dataset.missing='1';">
       <div class="hook" data-tip="Click for memory actions — encrypt, re-live, burn.">${escapeHtml(m.hook)}${m.backdoor ? ' <span style="color:var(--audit);" data-tip="Omni-Corp has a tracking ping on this memory. Auditors will find it.">•PING</span>' : ''}</div>
       <div class="meta">
         <span class="emotion ${m.emotion}" data-tip="${escapeHtml(EMOTION_TIPS[m.emotion] || "")}">${m.emotion.toUpperCase()}</span>
@@ -730,7 +774,11 @@ function renderStack() {
         <span data-tip="${m.source === 'Yours' ? 'Your own memory. Unchanged.' : m.source === 'Stolen' ? 'Extracted from someone else. Has a moral cost.' : 'Synthetic copy. Half-clarity and sometimes backdoored.'}">${m.source.toUpperCase()}</span>
       </div>
     `;
-    el.addEventListener("click", () => openMemoryModal(m));
+    const open = () => openMemoryModal(m);
+    el.addEventListener("click", open);
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+    });
     ml.appendChild(el);
   });
 }
@@ -760,6 +808,11 @@ function render() {
   renderAugs();
   renderCaseBoard();
   renderSideBadges();
+  // Sight overlay is derived state: persistent toggle OR a temporary in-run
+  // scan. Driving it from render() keeps the body class and button in sync
+  // after loads, scans, and toggles without each call site managing the DOM.
+  document.body.classList.toggle("sight-active", !!state.sightToggled || !!state.sightActive);
+  refreshSightButton();
 }
 
 // ---- Side-panel popup launchers ----------------------------------------
@@ -844,6 +897,73 @@ function closeSidePanel(back, removeFn) {
   if (panel && home) home.appendChild(panel);
   (removeFn || Element.prototype.remove.bind(back))();
 }
+
+// ---- Modal focus management (centralized) ----------------------------------
+// Every dialog in this game is a `.modal-back` element appended to #modal-root
+// or <body>. Rather than retrofit focus handling into ~10 hand-rolled call
+// sites, watch those two containers: on insert, remember the previously-focused
+// element, label the dialog, move focus inside, and trap Tab; on removal,
+// restore focus. Keeps keyboard users from tabbing into the page behind a modal
+// and from losing their place when it closes, and announces dialogs to readers.
+(function installModalFocusManager() {
+  const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  let seq = 0;
+  const focusablesIn = (root) => Array.from(root.querySelectorAll(FOCUSABLE))
+    .filter(el => !el.disabled && el.offsetParent !== null);
+
+  function activate(back) {
+    if (back.__focusManaged) return;
+    back.__focusManaged = true;
+    const dialog = back.querySelector(".modal") || back;
+    if (!dialog.getAttribute("role")) dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    const heading = dialog.querySelector("h1, h2, h3");
+    if (heading) {
+      if (!heading.id) heading.id = "modal-title-" + (++seq);
+      dialog.setAttribute("aria-labelledby", heading.id);
+    }
+    back.__prevFocus = document.activeElement;
+    const f = focusablesIn(back);
+    const target = f[0] || dialog;
+    if (target === dialog && !dialog.hasAttribute("tabindex")) dialog.setAttribute("tabindex", "-1");
+    try { target.focus({ preventScroll: true }); } catch (_) {}
+    back.__trap = (e) => {
+      if (e.key !== "Tab") return;
+      const list = focusablesIn(back);
+      if (!list.length) { e.preventDefault(); return; }
+      const first = list[0], last = list[list.length - 1];
+      const active = document.activeElement;
+      if (!back.contains(active)) { e.preventDefault(); first.focus(); return; }
+      if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+    };
+    back.addEventListener("keydown", back.__trap);
+  }
+
+  function deactivate(back) {
+    if (back.__trap) { back.removeEventListener("keydown", back.__trap); back.__trap = null; }
+    const prev = back.__prevFocus;
+    if (prev && document.contains(prev)) { try { prev.focus({ preventScroll: true }); } catch (_) {} }
+  }
+
+  const obs = new MutationObserver((muts) => {
+    for (const m of muts) {
+      m.addedNodes.forEach(n => {
+        if (n.nodeType === 1 && n.classList && n.classList.contains("modal-back")) activate(n);
+      });
+      m.removedNodes.forEach(n => {
+        if (n.nodeType === 1 && n.classList && n.classList.contains("modal-back")) deactivate(n);
+      });
+    }
+  });
+  const watch = () => {
+    const root = document.getElementById("modal-root");
+    if (root) obs.observe(root, { childList: true });
+    if (document.body) obs.observe(document.body, { childList: true });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", watch);
+  else watch();
+})();
 
 
 function renderRep() {
@@ -1135,6 +1255,10 @@ function initTooltips() {
   };
   const hide = () => { _tooltipEl.style.display = "none"; };
   const move = (e) => {
+    // This fires on every pointer move across the whole document. When no tip is
+    // showing, bail before touching layout (the offsetWidth reads below force a
+    // synchronous reflow otherwise).
+    if (_tooltipEl.style.display === "none") return;
     // Position below-right of the cursor, flipping at viewport edges
     const t = _tooltipEl;
     const px = e.clientX + 14;
@@ -1914,8 +2038,8 @@ const ARCS = {
           tag: "RESO",
           action: () => {
             state.sightActive = true;
-            document.body.classList.add("sight-active");
-            setTimeout(() => { state.sightActive = false; document.body.classList.remove("sight-active"); }, 3000);
+            render(); // applies .sight-active without clobbering a persistent toggle
+            setTimeout(() => { state.sightActive = false; render(); }, 3000);
             log("// Reso's overlay unfolds. Hidden echoes bleed through the walls.", "lore");
             gainNamedMemory({ emotion: "Awe", clarity: 4, hook: "An echo of a drowned technician — their last morning" });
             gainNamedMemory({ emotion: "Fear", clarity: 3 });
@@ -2811,6 +2935,22 @@ function computeAuditTier(c) {
   return 0;
 }
 
+// Reduce compliance heat (vendor scrubs, prayer, recipes, daily events). This
+// mirrors complianceTick's upward ratchet in reverse: if heat falls below the
+// tier that dispatched a pending audit, the unit stands down to match — and the
+// audit clears entirely once heat drops under the Watcher threshold. Without
+// this, the HUD would keep reading "AUDITOR DISPATCHED" at low heat and a stale
+// pending audit would still fire after the player paid memories to scrub it.
+function reduceCompliance(amount) {
+  if (!(amount > 0)) return;
+  state.compliance = Math.max(0, state.compliance - amount);
+  const newTier = computeAuditTier(state.compliance);
+  if (newTier < (state.auditTier || 0)) {
+    state.auditTier = newTier;
+    if (newTier === 0) state.auditPending = false;
+  }
+}
+
 // ================================================================
 // ==== THE SIGHT ====
 // Reso's pirate overlay. Toggle on to reveal echoes in certain
@@ -2823,10 +2963,9 @@ function computeAuditTier(c) {
 // something.
 function toggleSightMode() {
   state.sightToggled = !state.sightToggled;
-  document.body.classList.toggle("sight-active", !!state.sightToggled);
   if (state.sightToggled) log("// Reso's overlay locked on. Hidden echoes will bleed through.", "lore");
   else log("// You let the overlay fall.", "warn");
-  refreshSightButton();
+  render(); // render() owns the .sight-active class and button state
 }
 function refreshSightButton() {
   const b = document.getElementById("btn-sight");
@@ -2998,7 +3137,7 @@ const PENDING_EVENTS = {
           action: () => {
             const stolen = state.memories.find(m => !m.encrypted && m.source === "Stolen");
             if (stolen) { removeMemory(stolen.id); log(`// They took "${stolen.hook}".`, "warn"); }
-            state.compliance = Math.max(0, state.compliance - 20);
+            reduceCompliance(20);
             enterSafehouseAfterEvent();
           }
         },
@@ -3087,7 +3226,7 @@ function openMemoryModal(m) {
       <h2>// MEMORY RECORD</h2>
       <div class="body">
         <div class="memory-polaroid ${m.synthetic ? 'synthetic' : ''}">
-          <img src="${modalImgSrc}" alt="Memory polaroid — ${escapeHtml(m.hook)}" onerror="this.onerror=null;this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';this.dataset.missing='1';">
+          <img src="${modalImgSrc}" alt="Memory polaroid — ${escapeHtml(m.hook)}" decoding="async" onerror="this.onerror=null;this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';this.dataset.missing='1';">
           <div class="caption">"${escapeHtml(m.hook)}"</div>
         </div>
         <p style="color:var(--dim);font-size:12px;">
@@ -3283,7 +3422,7 @@ function openRipperdoc() {
       const mem = findTaggedMemory({ tags: ["Corporate", "Machine"] });
       if (!mem) { log("// Need an unsecured Corporate + Machine memory.", "warn"); return; }
       mem.backdoor = false;
-      state.compliance = Math.max(0, state.compliance - 10);
+      reduceCompliance(10);
       bumpTrust("ripperdoc");
       recordConsequence("RECIPE", `Ripperdoc scrubbed ${shortHook(mem.hook)}.`, "ok");
       log(`// Recipe complete. "${mem.hook}" no longer carries an Omni ping.`, "ok");
@@ -3457,7 +3596,7 @@ function openShadow() {
       if (!mem) { log("// Need a Stolen memory tagged Blackmail.", "warn"); return; }
       removeMemory(mem.id);
       state.reputation.shadow = Math.min(10, state.reputation.shadow + 4);
-      state.compliance = Math.max(0, state.compliance - 18);
+      reduceCompliance(18);
       bumpTrust("shadow");
       log("// The Shadow turns the blackmail into leverage. Heat drops hard.", "lore");
       openShadow();
@@ -3469,7 +3608,7 @@ function openShadow() {
       label: "Request a briefing — Omni intel + Compliance -15",
       tag: "INFO",
       action: () => {
-        state.compliance = Math.max(0, state.compliance - 15);
+        reduceCompliance(15);
         state.flags.omniSabotageOffered = true;
         log("// The archivist draws a schematic on your wrist. A new contract will open.", "ok");
         bumpTrust("shadow");
@@ -3486,7 +3625,7 @@ function donateMemory(m) {
   const vivid = m.clarity >= 4;
   removeMemory(m.id);
   state.reputation.shadow = Math.min(10, state.reputation.shadow + (isStolen ? 3 : 2));
-  state.compliance = Math.max(0, state.compliance - (isStolen ? 12 : 8) - (vivid ? 5 : 0));
+  reduceCompliance((isStolen ? 12 : 8) + (vivid ? 5 : 0));
   bumpTrust("shadow");
   log(`// Donated "${m.hook}" to the archive.${isStolen ? " Stolen memories are gold to them." : " Compliance heat drops slightly."}`, "lore");
   if (vivid) log("// The archivists weep at the detail. Extra heat scrubbed.", "ok");
@@ -3516,7 +3655,7 @@ function openGrey() {
         const mem = state.memories.find(m => !m.encrypted && m.emotion === "Awe" && m.clarity >= 3);
         if (!mem) { log("// No Awe·3+ memory on offer.", "warn"); return; }
         removeMemory(mem.id);
-        state.compliance = Math.max(0, state.compliance - 25);
+        reduceCompliance(25);
         state.reputation.grey = Math.min(10, state.reputation.grey + 1);
         bumpTrust("grey");
         log("// Lattice absorbs the memory. Your Compliance ping drops.", "ok");
@@ -3532,7 +3671,7 @@ function openGrey() {
       if (!mem) { log("// Need an unsecured Dream + Corporate memory.", "warn"); return; }
       removeMemory(mem.id);
       state.flags.latticeOffered = true;
-      state.compliance = Math.max(0, state.compliance - 12);
+      reduceCompliance(12);
       bumpTrust("grey");
       log("// Lattice forecasts the next Omni move. Quiet Line is forced open.", "ok");
       openGrey();
@@ -3587,7 +3726,7 @@ function openPurity() {
           state.reputation.purity -= 1;
           return;
         }
-        state.compliance = Math.max(0, state.compliance - 20);
+        reduceCompliance(20);
         state.reputation.purity += 2;
         bumpTrust("purity");
         log("// You prayed. The heat drops. Something clean.", "ok");
@@ -3603,7 +3742,7 @@ function openPurity() {
         const stolen = state.memories.find(m => m.source === "Stolen");
         if (!stolen) { log("// You have no stolen memories to confess.", "warn"); return; }
         removeMemory(stolen.id);
-        state.compliance = Math.max(0, state.compliance - 30);
+        reduceCompliance(30);
         state.reputation.purity += 3;
         log("// You burned a stolen memory on the altar. Kael weeps. The heat drops.", "ok");
         render();
@@ -3619,7 +3758,7 @@ function openPurity() {
       if (!mem) { log("// Need an unsecured Grief memory tagged Faith.", "warn"); return; }
       removeMemory(mem.id);
       state.reputation.purity = Math.min(10, state.reputation.purity + 3);
-      state.compliance = Math.max(0, state.compliance - 12);
+      reduceCompliance(12);
       bumpTrust("purity");
       log("// Kael calls the confession useful. You dislike how he says it.", "lore");
       openPurity();
@@ -3876,7 +4015,9 @@ function writeSlot(i, payload) {
 
 function autosave() {
   const i = activeSlotIndex();
-  storageSet(slotKey(i), JSON.stringify(state));
+  if (!storageSet(slotKey(i), JSON.stringify(state))) {
+    log("// AUTOSAVE FAILED — local storage full. Use EXPORT to back up your run.", "bad");
+  }
 }
 function saveGame() {
   const i = activeSlotIndex();
@@ -4569,7 +4710,7 @@ const DAILY_EVENTS = [
             if (!bait) { log("// No Fear·2 memory to broadcast as decoy.", "warn"); return; }
             removeMemory(bait.id);
             log(`// Broadcast "${bait.hook}" as decoy. The Hound chases a ghost.`, "ok");
-            state.compliance = Math.max(0, state.compliance - 10);
+            reduceCompliance(10);
             enterSafehouseAfterEvent();
           }
         }
@@ -4629,7 +4770,7 @@ const DAILY_EVENTS = [
             const fear = state.memories.find(m => !m.encrypted && m.emotion === "Fear");
             if (fear) { removeMemory(fear.id); log(`// They scraped "${fear.hook}".`, "warn"); }
             state.reputation.omni += 1;
-            state.compliance = Math.max(0, state.compliance - 15);
+            reduceCompliance(15);
             enterSafehouseAfterEvent();
           }
         },
@@ -4662,8 +4803,10 @@ const DAILY_EVENTS = [
           action: () => {
             const m = randomMemory({ emotion: "Awe", clarity: 4 });
             m.hook = "A toaster singing your grandmother's lullaby in binary";
-            addMemory(m);
+            // Raise capacity BEFORE adding, so a full stack actually accepts the
+            // reward instead of rejecting it as overflow (and taxing compliance).
             state.capacity = Math.min(12, state.capacity + 1);
+            addMemory(m);
             log("// The shaman taught you to carry one more memory than you thought you could.", "ok");
             enterSafehouseAfterEvent();
           }
@@ -4775,15 +4918,17 @@ function warResolve(outcome) {
 
   if (outcome === "killed") {
     // Brutal — player loses half their memories and a big compliance spike, but survives
-    const losses = Math.ceil(state.memories.length / 2);
-    const toRemove = state.memories.filter(m => !m.encrypted).slice(0, losses);
+    const pool = state.memories.filter(m => !m.encrypted);
+    const losses = Math.ceil(pool.length / 2);
+    const toRemove = pool.slice(0, losses);
     toRemove.forEach(m => removeMemory(m.id));
     complianceTick(25);
     log(`// Duchess left you breathing. Barely. ${losses} memories taken.`, "bad");
   }
   if (outcome === "abandoned") {
-    const losses = Math.ceil(state.memories.length / 2);
-    const toRemove = state.memories.filter(m => !m.encrypted).slice(0, losses);
+    const pool = state.memories.filter(m => !m.encrypted);
+    const losses = Math.ceil(pool.length / 2);
+    const toRemove = pool.slice(0, losses);
     toRemove.forEach(m => removeMemory(m.id));
     complianceTick(15);
   }

@@ -669,6 +669,19 @@ body {
   outline: 2px solid var(--neon-y);
   outline-offset: 2px;
 }
+/* Global keyboard focus ring. The game ships arrow/Enter navigation, so every
+   interactive control needs a visible focus indicator on this dark phosphor
+   palette — the faint UA default is near-invisible here (and suppressed on the
+   custom-bordered buttons). Memory cards are role="button" focusables too. */
+button:focus-visible,
+.choice:focus-visible,
+.tool-btn:focus-visible,
+.station:focus-visible,
+.memory:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--neon-y);
+  outline-offset: 2px;
+}
 .side-btn-label {
   text-shadow: 0 0 6px var(--neon-c);
 }
